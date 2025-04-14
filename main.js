@@ -16,7 +16,7 @@ class PuzzlePiece {
     draw(context) {
         context.save();
         if (this.dragging) {
-            context.shadowColor = 'rgba(255,255,255,0.5)';
+            context.shadowColor = 'rgba(0,0,0,0.5)';
             context.shadowBlur = 10;
             context.shadowOffsetY = 5;
         }
@@ -42,38 +42,77 @@ class Game {
         this.offsetY = 0;
         this.loadImage();
 
-        this.history = [];
-        this.historyIndex = -1;
+        // Undo/redo system
+        this.history = [];       // Stores all game states
+        this.currentState = -1;  // Points to current state in history
+        this.maxStates = 20;     // Limit history size
+
     }
 
+    // Call this whenever a piece is moved
     saveState() {
-        this.history = this.history.slice(0, this.historyIndex + 1);
-        this.history.push(this.pieces.map(p => ({x: p.x, y: p.y})));
-        this.historyIndex++;
+        // Only save if more than 100ms since last save
+        if (this.lastSave && Date.now() - this.lastSave < 100) return;
+        this.lastSave = Date.now();
+
+        // Remove any states after current position (if we undo then make a new move)
+        this.history = this.history.slice(0, this.currentState + 1);
+        
+        // Don't save if we've reached max states
+        if (this.history.length >= this.maxStates) {
+            this.history.shift(); // Remove oldest state
+            this.currentState--;
+        }
+        
+        // Save current positions of all pieces
+        const state = this.pieces.map(piece => ({
+            x: piece.x,
+            y: piece.y,
+            rotation: piece.rotation || 0 // Include if you have rotation
+        }));
+        
+        this.history.push(state);
+        this.currentState = this.history.length - 1;
+    }
+
+    // Restore a previous state
+    restoreState() {
+        if (this.currentState < 0 || this.currentState >= this.history.length) return;
+        
+        const state = this.history[this.currentState];
+        state.forEach((pieceState, index) => {
+            this.pieces[index].x = pieceState.x;
+            this.pieces[index].y = pieceState.y;
+            if (pieceState.rotation !== undefined) {
+                this.pieces[index].rotation = pieceState.rotation;
+            }
+        });
+        
+        this.render();
     }
 
     undo() {
-        if (this.historyIndex > 0) {
-            this.historyIndex--;
-            this.applyState();
+        if (this.currentState > 0) {
+            this.currentState--;
+            this.restoreState();
         }
     }
 
     redo() {
-        if (this.historyIndex < this.history.length - 1) {
-            this.historyIndex++;
-            this.applyState();
+        if (this.currentState < this.history.length - 1) {
+            this.currentState++;
+            this.restoreState();
         }
     }
 
-    applyState() {
-        const state = this.history[this.historyIndex];
-        state.forEach((pos, i) => {
-            this.pieces[i].x = pos.x;
-            this.pieces[i].y = pos.y;
-        });
-        this.render();
-    }
+    // applyState() {
+    //     const state = this.history[this.historyIndex];
+    //     state.forEach((pos, i) => {
+    //         this.pieces[i].x = pos.x;
+    //         this.pieces[i].y = pos.y;
+    //     });
+    //     this.render();
+    // }
 
     loadImage() {
         this.image = new Image();
@@ -175,6 +214,15 @@ class Game {
         this.canvas.addEventListener('touchstart', (e) => this.onTouchStart(e));
         this.canvas.addEventListener('touchmove', (e) => this.onTouchMove(e));
         this.canvas.addEventListener('touchend', () => this.onTouchEnd());
+
+        // Add keyboard shortcuts
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'z') {
+                this.undo();
+            } else if (e.ctrlKey && e.key === 'y') {
+                this.redo();
+            }
+        });
     }
 
     onTouchStart(e) {
@@ -215,6 +263,8 @@ class Game {
                 break;
             }
         }
+        // Save initial position when starting to drag
+        this.saveState();
     }
 
     onMouseMove(event) {
@@ -260,6 +310,10 @@ class Game {
             this.draggingPiece.x = this.draggingPiece.correctX;
             this.draggingPiece.y = this.draggingPiece.correctY;
         }
+
+         // Save final position
+        this.saveState();
+
         this.draggingPiece = null;
         this.render();
 
