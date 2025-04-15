@@ -131,9 +131,14 @@ class Game {
         this.renderTimer(); // Update display
     }
 
+    // updateTimer() {
+    //     this.elapsedTime = Date.now() - this.startTime;
+    //     this.renderTimer();
+    // }
     updateTimer() {
         this.elapsedTime = Date.now() - this.startTime;
-        this.renderTimer();
+        // Trigger a full render of the game including the updated timer.
+        this.render();
     }
 
      // Format time for display
@@ -144,18 +149,18 @@ class Game {
         return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     }
 
-    renderTimer() {
-        this.context.clearRect(10, 10, 150, 40);
-        // Clear previous timer area
-        this.context.fillStyle = 'rgba(0, 0, 0, 0.5)';
-        this.context.fillRect(10, 10, 120, 40);
+    // renderTimer() {
+    //     this.context.clearRect(10, 10, 150, 40);
+    //     // Clear previous timer area
+    //     this.context.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    //     this.context.fillRect(10, 10, 120, 40);
         
-        // Draw timer text
-        this.context.fillStyle = 'white';
-        this.context.font = '24px Arial';
-        this.context.textAlign = 'left';
-        this.context.fillText(`Time: ${this.formatTime(this.elapsedTime)}`, 20, 35);
-    }
+    //     // Draw timer text
+    //     this.context.fillStyle = 'white';
+    //     this.context.font = '24px Arial';
+    //     this.context.textAlign = 'left';
+    //     this.context.fillText(`Time: ${this.formatTime(this.elapsedTime)}`, 20, 35);
+    // }
 
     saveState() {
         // Only save if more than 100ms since last save
@@ -508,6 +513,26 @@ class Game {
         }
     }
 
+    drawGridBackground() {
+        // Save current context settings.
+        this.context.save();
+        
+        // Set the fill style for the grid area.
+        // Customize this color as needed.
+        this.context.fillStyle = '#333'; 
+        
+        // Fill the grid area.
+        this.context.fillRect(this.drawX, this.drawY, this.drawWidth, this.drawHeight);
+        
+        // Now draw the boundary on top of the fill.
+        this.context.strokeStyle = 'white';  // Customize boundary color.
+        this.context.lineWidth = 3;            // Customize boundary thickness.
+        this.context.strokeRect(this.drawX, this.drawY, this.drawWidth, this.drawHeight);
+        
+        // Restore previous context settings.
+        this.context.restore();
+    }
+
     showVictoryMessage() {
         this.pauseTimer(); // Stop timer when puzzle is complete
 
@@ -537,33 +562,43 @@ class Game {
         // if (!this.needsRender) return;
         this.needsRender = false;
     
+        // Clear the entire canvas.
         this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
         
-        // Draw a background (optional)
+        // Draw a global background.
         this.context.fillStyle = 'black';
         this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
         
-        // Draw the pieces
-        this.pieces.forEach(piece => piece.draw(this.context));
-
-        // Draw grid lines
+        // Fill the grid background and draw its boundary.
+        this.drawGridBackground();
+        
+        // Draw grid lines (if needed).
         this.context.strokeStyle = 'rgba(255,255,255,0.5)';
         for(let row = 1; row < this.rows; row++) {
-            const y = this.drawY + row * (this.drawHeight/this.rows);
+            const y = this.drawY + row * (this.drawHeight / this.rows);
             this.context.beginPath();
             this.context.moveTo(this.drawX, y);
             this.context.lineTo(this.drawX + this.drawWidth, y);
             this.context.stroke();
         }
         for(let col = 1; col < this.cols; col++) {
-            const x = this.drawX + col * (this.drawWidth/this.cols);
+            const x = this.drawX + col * (this.drawWidth / this.cols);
             this.context.beginPath();
             this.context.moveTo(x, this.drawY);
             this.context.lineTo(x, this.drawY + this.drawHeight);
             this.context.stroke();
         }
-
-        // this.renderTimer(); // Always show timer
+        
+        // Draw the puzzle pieces on top.
+        this.pieces.forEach(piece => piece.draw(this.context));
+        
+        // Draw the timer overlay.
+        this.context.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        this.context.fillRect(10, 10, 120, 40);
+        this.context.fillStyle = 'white';
+        this.context.font = '24px Arial';
+        this.context.textAlign = 'left';
+        this.context.fillText(`Time: ${this.formatTime(this.elapsedTime)}`, 20, 35);
     }
 }
 
