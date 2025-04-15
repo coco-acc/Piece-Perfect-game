@@ -1,3 +1,114 @@
+function createJigsawPath(ctx, width, height, tabs) {
+    const tabSize = Math.min(width, height) / 2.5;
+    const bumpSize = Math.min(width, height) / 4; // Size of the bump
+
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+
+    // --- Top Edge ---
+    if (tabs.top === 0) {
+        ctx.lineTo(width, 0);
+    } else {
+        const midX = width / 2;
+        ctx.lineTo(midX - bumpSize, 0);
+        
+        if (tabs.top > 0) {
+            // Convex tab (outward curve)
+            ctx.bezierCurveTo(
+                midX - bumpSize / 2, -tabSize,  // Control point 1 (above)
+                midX + bumpSize / 2, -tabSize,  // Control point 2 (above)
+                midX + bumpSize, 0             // End point
+            );
+        } else {
+            // Concave tab (inward curve)
+            ctx.bezierCurveTo(
+                midX - bumpSize / 2, tabSize,  // Control point 1 (below)
+                midX + bumpSize / 2, tabSize,  // Control point 2 (below)
+                midX + bumpSize, 0             // End point
+            );
+        }
+        ctx.lineTo(width, 0);
+    }
+
+    // --- Right Edge ---
+    if (tabs.right === 0) {
+        ctx.lineTo(width, height);
+    } else {
+        const midY = height / 2;
+        ctx.lineTo(width, midY - bumpSize);
+        
+        if (tabs.right > 0) {
+            // Convex tab (outward curve)
+            ctx.bezierCurveTo(
+                width + tabSize, midY - bumpSize / 2,  // Control point 1 (right)
+                width + tabSize, midY + bumpSize / 2,  // Control point 2 (right)
+                width, midY + bumpSize                 // End point
+            );
+        } else {
+            // Concave tab (inward curve)
+            ctx.bezierCurveTo(
+                width - tabSize, midY - bumpSize / 2,  // Control point 1 (left)
+                width - tabSize, midY + bumpSize / 2,  // Control point 2 (left)
+                width, midY + bumpSize                 // End point
+            );
+        }
+        ctx.lineTo(width, height);
+    }
+
+    // --- Bottom Edge ---
+    if (tabs.bottom === 0) {
+        ctx.lineTo(0, height);
+    } else {
+        const midX = width / 2;
+        ctx.lineTo(midX + bumpSize, height);
+        
+        if (tabs.bottom > 0) {
+            // Convex tab (outward curve)
+            ctx.bezierCurveTo(
+                midX + bumpSize / 2, height + tabSize,  // Control point 1 (below)
+                midX - bumpSize / 2, height + tabSize,   // Control point 2 (below)
+                midX - bumpSize, height                 // End point
+            );
+        } else {
+            // Concave tab (inward curve)
+            ctx.bezierCurveTo(
+                midX + bumpSize / 2, height - tabSize,  // Control point 1 (above)
+                midX - bumpSize / 2, height - tabSize,  // Control point 2 (above)
+                midX - bumpSize, height                 // End point
+            );
+        }
+        ctx.lineTo(0, height);
+    }
+
+    // --- Left Edge ---
+    if (tabs.left === 0) {
+        ctx.lineTo(0, 0);
+    } else {
+        const midY = height / 2;
+        ctx.lineTo(0, midY + bumpSize);
+        
+        if (tabs.left > 0) {
+            // Convex tab (outward curve)
+            ctx.bezierCurveTo(
+                -tabSize, midY + bumpSize / 2,  // Control point 1 (left)
+                -tabSize, midY - bumpSize / 2,  // Control point 2 (left)
+                0, midY - bumpSize              // End point
+            );
+        } else {
+            // Concave tab (inward curve)
+            ctx.bezierCurveTo(
+                tabSize, midY + bumpSize / 2,  // Control point 1 (right)
+                tabSize, midY - bumpSize / 2,  // Control point 2 (right)
+                0, midY - bumpSize             // End point
+            );
+        }
+        ctx.lineTo(0, 0);
+    }
+
+    ctx.closePath();
+}
+
+
 class PuzzlePiece {
     constructor(image, x, y, width, height, correctX, correctY) {
         this.image = image;
@@ -20,10 +131,7 @@ class PuzzlePiece {
             pulsePhase: 0
         };
     }
-
-    // draw(context) {
-    //     context.drawImage(this.image, this.x, this.y, this.width, this.height);
-    // }
+   
     draw(context) {
         context.save();
         if (this.dragging) {
@@ -31,19 +139,31 @@ class PuzzlePiece {
             context.shadowBlur = 10;
             context.shadowOffsetY = 5;
         }
-        context.drawImage(this.image, this.x, this.y, this.width, this.height);
+        // Draw the offscreen canvas containing the piece image.
+        // Instead of scaling the offscreen canvas to the base piece size,
+        // we want to draw it at its natural (larger) size, offset so that
+        // the central base area aligns with (this.x, this.y).
+        // The offscreen canvas width and height are (base + 2*margin).
+        context.drawImage(
+            this.image,
+            0, 0, this.image.width, this.image.height,
+            this.x - this.imageMargin, // shift left by margin
+            this.y - this.imageMargin, // shift up by margin
+            this.image.width,
+            this.image.height
+        );
 
         // Draw highlight if active
         if (this.isHighlighted) {
             this.highlightEffects.pulsePhase += 0.1;
             const pulseAlpha = (0.3 + (Math.sin(this.highlightEffects.pulsePhase)) * 0.2);
             context.save();
-            context.strokeStyle = `rgba(255, 255, 0, ${pulseAlpha})`;
+            context.strokeStyle = 'ebf1ef';
+            // context.strokeStyle = `rgba(255, 255, 0, ${pulseAlpha})`;
             context.lineWidth = 3 + Math.sin(this.highlightEffects.pulsePhase) * 2;
             context.strokeRect(this.x, this.y, this.width, this.height);
             context.restore();
         }
-
         context.restore();
     }
 
@@ -84,6 +204,8 @@ class Game {
         this.timerInterval = null;
         this.isTimerRunning = false;
 
+        this.gridImg = new Image();
+        this.gridImg.src = ('IMG/wood_1920.jpg');
     }
 
      startTimer() {
@@ -148,19 +270,6 @@ class Game {
         const seconds = totalSeconds % 60;
         return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
     }
-
-    // renderTimer() {
-    //     this.context.clearRect(10, 10, 150, 40);
-    //     // Clear previous timer area
-    //     this.context.fillStyle = 'rgba(0, 0, 0, 0.5)';
-    //     this.context.fillRect(10, 10, 120, 40);
-        
-    //     // Draw timer text
-    //     this.context.fillStyle = 'white';
-    //     this.context.font = '24px Arial';
-    //     this.context.textAlign = 'left';
-    //     this.context.fillText(`Time: ${this.formatTime(this.elapsedTime)}`, 20, 35);
-    // }
 
     saveState() {
         // Only save if more than 100ms since last save
@@ -242,7 +351,8 @@ class Game {
             this.drawWidth = drawWidth;
             this.drawHeight = drawHeight;
             
-            this.createPieces();
+            this.createJigSawPieces();
+            // this.createPieces();
             this.startTimer(); // Start timer when pieces are created
 
         };
@@ -311,7 +421,113 @@ class Game {
         
     }
 
-   addEventListeners() {
+    createJigSawPieces() {
+        // Calculate the base piece dimensions (collision/layout area without tabs).
+        const pieceWidth = this.drawWidth / this.cols;
+        const pieceHeight = this.drawHeight / this.rows;
+
+        // Generate a tabMap for interlocking edges.
+        const tabMap = [];
+        for (let row = 0; row < this.rows; row++) {
+            tabMap[row] = [];
+            for (let col = 0; col < this.cols; col++) {
+                const top = row === 0 ? 0 : -tabMap[row - 1][col].bottom;
+                const left = col === 0 ? 0 : -tabMap[row][col - 1].right;
+                const right = (col === this.cols - 1) ? 0 : (Math.random() > 0.5 ? 1 : -1);
+                const bottom = (row === this.rows - 1) ? 0 : (Math.random() > 0.5 ? 1 : -1);
+                tabMap[row][col] = { top, right, bottom, left };
+            }
+        }
+
+        // Generate the target (correct) positions for each piece.
+        const correctPositions = [];
+        for (let row = 0; row < this.rows; row++) {
+            for (let col = 0; col < this.cols; col++) {
+                correctPositions.push({
+                    x: this.drawX + col * pieceWidth,
+                    y: this.drawY + row * pieceHeight
+                });
+            }
+        }
+        // Shuffle positions for initial placement.
+        const shuffledPositions = correctPositions.slice().sort(() => Math.random() - 0.5);
+
+        // Define an extra margin used only for the drawn image (the tabs).
+        // This margin will be added to the offscreen canvas, but not to the collision area.
+        const margin = Math.min(pieceWidth, pieceHeight) / 2; 
+
+        let index = 0;
+        for (let row = 0; row < this.rows; row++) {
+            for (let col = 0; col < this.cols; col++) {
+                // Correct (target) position for the piece.
+                const correctPos = correctPositions[index];
+                // Shuffled (starting) position.
+                const startPos = shuffledPositions[index];
+
+                // Create an offscreen canvas for the piece that is larger than the base piece.
+                const canvas = document.createElement('canvas');
+                // Offscreen canvas dimensions include the extra margin for the tabs.
+                canvas.width = pieceWidth + 2 * margin;
+                canvas.height = pieceHeight + 2 * margin;
+                const ctx = canvas.getContext('2d');
+
+                // Set up the jigsaw clipping region.
+                // Translate by the extra margin so the jigsaw shape is drawn at (margin, margin)
+                // using the base piece dimensions.
+                ctx.save();
+                ctx.translate(margin, margin);
+                createJigsawPath(ctx, pieceWidth, pieceHeight, tabMap[row][col]);
+                ctx.restore();
+                ctx.clip();
+
+                // Calculate the corresponding portion of the source image.
+                const srcPieceWidth = this.image.width / this.cols;
+                const srcPieceHeight = this.image.height / this.rows;
+                // Compute scale factors (if needed) between the drawn image and source image.
+                const scaleX = srcPieceWidth / pieceWidth;
+                const scaleY = srcPieceHeight / pieceHeight;
+                // Expand the source rectangle by the margin (scaled) to cover the extra tabs.
+                const srcX = col * srcPieceWidth - margin * scaleX;
+                const srcY = row * srcPieceHeight - margin * scaleY;
+                const srcW = srcPieceWidth + 2 * margin * scaleX;
+                const srcH = srcPieceHeight + 2 * margin * scaleY;
+
+                // Draw the source image onto the offscreen canvas.
+                ctx.drawImage(
+                    this.image,
+                    srcX, srcY, srcW, srcH,
+                    0, 0, canvas.width, canvas.height
+                );
+
+                // (Optional) Draw a border around the jigsaw shape.
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+                ctx.stroke();
+
+                // Create a new PuzzlePiece.
+                // Use only the base piece dimensions for collision and layout.
+                const piece = new PuzzlePiece(
+                    canvas,       // The offscreen canvas contains the full jigsaw image with extra margin.
+                    startPos.x,   // starting x (shuffled)
+                    startPos.y,   // starting y (shuffled)
+                    pieceWidth,   // base width (used for snapping/collision)
+                    pieceHeight,  // base height
+                    correctPos.x, // target x
+                    correctPos.y  // target y
+                );
+                // Store the extra margin (for drawing purposes) on the piece.
+                piece.imageMargin = margin;
+
+                this.pieces.push(piece);
+                index++;
+            }
+        }
+
+        this.addEventListeners();
+        this.render();
+    }
+
+    addEventListeners() {
         // Mouse events
         this.canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
         this.canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
@@ -470,14 +686,13 @@ class Game {
                 // Overlap is detected.
                 // Move the overlapped piece outside of the grid to the right.
                 // Here, we position it just a few pixels to the right of the grid boundary.
-                const offset = 10; // adjust as needed
+                const offset = 30; // adjust as needed
                 piece.x = this.drawX + this.drawWidth + offset;
                 // Optionally, align its y coordinate with its current grid row.
                 piece.y = cell.row * pieceHeight + this.drawY;
             }
         }
     }
-
 
     onMouseUp() {
         if (!this.draggingPiece) return;
@@ -518,11 +733,17 @@ class Game {
         this.context.save();
         
         // Set the fill style for the grid area.
-        // Customize this color as needed.
-        this.context.fillStyle = '#333'; 
+        // this.context.fillStyle = '#333'; 
         
         // Fill the grid area.
+        this.context.save();
+        this.context.globalAlpha = 0.7; // 70% opacity
+        this.context.drawImage(this.gridImg, this.drawX, this.drawY, this.drawWidth, this.drawHeight);
+        this.context.globalCompositeOperation = "multiply"; // Apply tint
+        this.context.fillStyle = "rgba(0, 0, 124, 0.7)"; //  tint
         this.context.fillRect(this.drawX, this.drawY, this.drawWidth, this.drawHeight);
+        this.context.globalCompositeOperation = "source-over"; // Reset
+        this.context.restore(); // Restore original state
         
         // Now draw the boundary on top of the fill.
         this.context.strokeStyle = 'white';  // Customize boundary color.
@@ -605,12 +826,9 @@ class Game {
 window.addEventListener('load', () => {
     const canvas = document.getElementById('canvas');
     const context = canvas.getContext('2d');
-    canvas.width = 1920;
-    canvas.height = 720;
+    canvas.width = window.innerWidth - 200;
+    canvas.height = window.innerHeight - 200;
     
-    const game = new Game(canvas, context, 'IMG/puzzle-image.jpg', 3, 3);
+    const game = new Game(canvas, context, 'IMG/puzzle-image.jpg', 2, 3);
 
-    function animate() {
-
-    }
 });
