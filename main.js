@@ -8,6 +8,17 @@ class PuzzlePiece {
         this.correctX = correctX;
         this.correctY = correctY;
         this.dragging = false;
+
+        //piece highlighting
+        this.isHighlighted = false;
+        this.highlightColor = 'rgba(255, 255, 0, 0.3)'; // Yellow highlight
+        this.highlightWidth = 5; // Border thickness 
+
+        this.highlightEffects = {
+            glow: false,
+            pulse: false,
+            pulsePhase: 0
+        };
     }
 
     // draw(context) {
@@ -21,11 +32,31 @@ class PuzzlePiece {
             context.shadowOffsetY = 5;
         }
         context.drawImage(this.image, this.x, this.y, this.width, this.height);
+
+        // Draw highlight if active
+        if (this.isHighlighted) {
+            this.highlightEffects.pulsePhase += 0.1;
+            const pulseAlpha = (0.3 + (Math.sin(this.highlightEffects.pulsePhase)) * 0.2);
+            context.save();
+            context.strokeStyle = `rgba(255, 255, 0, ${pulseAlpha})`;
+            context.lineWidth = 3 + Math.sin(this.highlightEffects.pulsePhase) * 2;
+            context.strokeRect(this.x, this.y, this.width, this.height);
+            context.restore();
+        }
+
         context.restore();
     }
 
     containsPoint(x, y) {
         return x > this.x && x < this.x + this.width && y > this.y && y < this.y + this.height;
+    }
+
+    highlight() {
+        this.isHighlighted = true;
+    }
+
+    unhighlight() {
+        this.isHighlighted = false;
     }
 }
 
@@ -47,9 +78,85 @@ class Game {
         this.currentState = -1;  // Points to current state in history
         this.maxStates = 20;     // Limit history size
 
+        //time tracking
+        this.startTime = null;
+        this.elapsedTime = 0; // in milliseconds
+        this.timerInterval = null;
+        this.isTimerRunning = false;
+
     }
 
-    // Call this whenever a piece is moved
+     startTimer() {
+        if (this.isTimerRunning) return;
+        
+        this.startTime = Date.now() - this.elapsedTime;
+        this.timerInterval = setInterval(() => {
+            this.updateTimer();
+        }, 1000); // Update every second
+        
+        this.isTimerRunning = true;
+    }
+
+    pauseTimer() {
+        if (!this.isTimerRunning) return;
+        
+        clearInterval(this.timerInterval);
+        this.isTimerRunning = false;
+    }
+
+    togglePause() {
+        if (this.isTimerRunning) {
+            this.pauseTimer();
+        } else {
+            this.resumeTimer();
+        }
+    }
+
+    resumeTimer() {
+        if (this.isTimerRunning) return;
+        
+        this.startTime = Date.now() - this.elapsedTime;
+        this.timerInterval = setInterval(() => {
+            this.updateTimer();
+        }, 1000);
+        
+        this.isTimerRunning = true;
+    }
+
+    resetTimer() {
+        clearInterval(this.timerInterval);
+        this.elapsedTime = 0;
+        this.startTime = null;
+        this.isTimerRunning = false;
+        this.renderTimer(); // Update display
+    }
+
+    updateTimer() {
+        this.elapsedTime = Date.now() - this.startTime;
+        this.renderTimer();
+    }
+
+     // Format time for display
+    formatTime(ms) {
+        const totalSeconds = Math.floor(ms / 1000);
+        const minutes = Math.floor(totalSeconds / 60);
+        const seconds = totalSeconds % 60;
+        return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }
+
+    renderTimer() {
+        this.context.clearRect(10, 10, 150, 40);
+        // Clear previous timer area
+        this.context.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        this.context.fillRect(10, 10, 120, 40);
+        
+        // Draw timer text
+        this.context.fillStyle = 'white';
+        this.context.font = '24px Arial';
+        this.context.textAlign = 'left';
+        this.context.fillText(`Time: ${this.formatTime(this.elapsedTime)}`, 20, 35);
+    }
+
     saveState() {
         // Only save if more than 100ms since last save
         if (this.lastSave && Date.now() - this.lastSave < 100) return;
@@ -105,15 +212,6 @@ class Game {
         }
     }
 
-    // applyState() {
-    //     const state = this.history[this.historyIndex];
-    //     state.forEach((pos, i) => {
-    //         this.pieces[i].x = pos.x;
-    //         this.pieces[i].y = pos.y;
-    //     });
-    //     this.render();
-    // }
-
     loadImage() {
         this.image = new Image();
         this.image.src = this.imageSrc;
@@ -140,6 +238,8 @@ class Game {
             this.drawHeight = drawHeight;
             
             this.createPieces();
+            this.startTimer(); // Start timer when pieces are created
+
         };
     }
 
@@ -201,7 +301,9 @@ class Game {
         }
 
         this.addEventListeners();
+        // this.startTimer(); // Start timer when pieces are created
         this.render();
+        
     }
 
    addEventListeners() {
@@ -221,6 +323,14 @@ class Game {
                 this.undo();
             } else if (e.ctrlKey && e.key === 'y') {
                 this.redo();
+            }
+        });
+
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'p') {
+                this.togglePause();
+            } else if (e.ctrlKey && e.key === 'r') {
+                this.resumeTimer();
             }
         });
     }
@@ -248,6 +358,20 @@ class Game {
         
         const offsetX = (event.clientX - rect.left) * scaleX;
         const offsetY = (event.clientY - rect.top) * scaleY;
+
+         // Unhighlight all pieces
+        this.pieces.forEach(p => p.unhighlight());
+
+        for (let piece of this.pieces) {
+            if (piece.containsPoint(offsetX, offsetY)) {
+                piece.highlight(); // Highlight the selected piece
+                this.draggingPiece = piece;
+                this.offsetX = offsetX - piece.x;
+                this.offsetY = offsetY - piece.y;
+                break;
+            }
+        }
+        this.render();
         
         // Check pieces in reverse order (top-most first)
         for (let i = this.pieces.length - 1; i >= 0; i--) {
@@ -305,13 +429,26 @@ class Game {
     onMouseUp() {
         if (!this.draggingPiece) return;
 
-        if (Math.abs(this.draggingPiece.x - this.draggingPiece.correctX) < 10 &&
-            Math.abs(this.draggingPiece.y - this.draggingPiece.correctY) < 10) {
-            this.draggingPiece.x = this.draggingPiece.correctX;
-            this.draggingPiece.y = this.draggingPiece.correctY;
+         // Calculate grid dimensions
+        const pieceWidth = this.drawWidth / this.cols;
+        const pieceHeight = this.drawHeight / this.rows;
+        
+        // Find the nearest grid position to snap to
+        const gridX = Math.round((this.draggingPiece.x - this.drawX) / pieceWidth) * pieceWidth + this.drawX;
+        const gridY = Math.round((this.draggingPiece.y - this.drawY) / pieceHeight) * pieceHeight + this.drawY;
+        
+        // Snap to the nearest grid, when threshold reached.
+        const threshold = 30;
+        const distX = Math.abs(this.draggingPiece.x - gridX);
+        const distY = Math.abs(this.draggingPiece.y - gridY);
+
+        if (distX < threshold && distY < threshold) {
+            this.draggingPiece.x = gridX;
+            this.draggingPiece.y = gridY;
         }
 
-         // Save final position
+
+        // Save final position
         this.saveState();
 
         this.draggingPiece = null;
@@ -324,6 +461,8 @@ class Game {
     }
 
     showVictoryMessage() {
+        this.pauseTimer(); // Stop timer when puzzle is complete
+
         this.context.fillStyle = 'rgba(0,0,0,0.7)';
         this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
         this.context.fillStyle = 'white';
@@ -333,9 +472,16 @@ class Game {
             this.canvas.width/2, 
             this.canvas.height/2
         );
+
+        // draw timer
+        this.context.fillText(`In ${this.formatTime(this.elapsedTime)}`, 
+            this.canvas.width/2, 
+            this.canvas.height/2 + 100
+        );
+
         this.context.fillText('🎉🎊 congratulations 🏆', 
             this.canvas.width/2, 
-            this.canvas.height/2+ 100
+            this.canvas.height/2+ 150
         );
     }
 
@@ -368,6 +514,8 @@ class Game {
             this.context.lineTo(x, this.drawY + this.drawHeight);
             this.context.stroke();
         }
+
+        // this.renderTimer(); // Always show timer
     }
 }
 
@@ -377,5 +525,9 @@ window.addEventListener('load', () => {
     canvas.width = 1920;
     canvas.height = 720;
     
-    const game = new Game(canvas, context, 'IMG/puzzle-image.jpg', 1, 3);
+    const game = new Game(canvas, context, 'IMG/puzzle-image.jpg', 3, 3);
+
+    function animate() {
+
+    }
 });
