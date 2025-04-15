@@ -183,6 +183,8 @@ class PuzzlePiece {
 class Game {
     constructor(canvas, context, imageSrc, rows, cols) {
         this.canvas = canvas;
+        this.canvas.width = this.canvas.width -200;
+        this.canvas.height = this.canvas.height -200;
         this.context = context;
         this.imageSrc = imageSrc;
         this.rows = rows;
@@ -580,7 +582,7 @@ class Game {
         const offsetX = (event.clientX - rect.left) * scaleX;
         const offsetY = (event.clientY - rect.top) * scaleY;
 
-         // Unhighlight all pieces
+        // Unhighlight all pieces
         this.pieces.forEach(p => p.unhighlight());
 
         for (let piece of this.pieces) {
@@ -823,12 +825,184 @@ class Game {
     }
 }
 
+class MainMenu {
+    constructor(canvas, context, startCallback) {
+        this.canvas = canvas;
+        this.context = context;
+        this.startCallback = startCallback; // function to call when Start Game is clicked
+
+        this.bgImg = new Image();
+        this.bgImg.src = "IMG/bg.png"; // Make sure this path is correct
+        this.bgImg.onload = () => {
+            this.render(); // Redraw when image loads
+        };
+        this.bgImg.onerror = () => {
+            console.error("Failed to load background image");
+        };
+
+        // Define buttons with centered x positions.
+        // y is set in relation to canvas height.
+        this.buttons = [
+            {                             
+                text: "Start Game",
+                x: (canvas.width / 2) - 220,
+                y: canvas.height / 1.1,
+                width: 190,
+                height: 50
+            },                                
+            {                             
+                text: "Options",
+                x: canvas.width / 2,
+                y: canvas.height / 1.1,
+                width: 190,
+                height: 50
+            },                                
+            {                             
+                text: "Help",
+                x: (canvas.width / 2) + 220,
+                y: canvas.height / 1.1,
+                width: 190,
+                height: 50
+            },                                
+            {                             
+                text: "Grid",
+                x: (canvas.width / 2) - 160,
+                y: canvas.height / 2.2,
+                width: 300,
+                height: 400
+            },                                
+            {                             
+                text: "Jigsaw",
+                x: (canvas.width / 2) + 160,
+                y: canvas.height / 2.2,
+                width: 300,
+                height: 400
+            }                             
+        ];
+
+        this.addEventListeners();
+    }
+
+    addEventListeners() {
+        // Bind the event handler so that 'this' refers to MainMenu.
+        this.canvas.addEventListener("click", this.handleClick.bind(this));
+    }
+
+    handleClick(event) {
+        // Convert the mouse event to canvas coordinates.
+        const rect = this.canvas.getBoundingClientRect();
+        const scaleX = this.canvas.width / rect.width;
+        const scaleY = this.canvas.height / rect.height;
+        const mouseX = (event.clientX - rect.left) * scaleX;
+        const mouseY = (event.clientY - rect.top) * scaleY;
+
+        for (let btn of this.buttons) {
+          // Determine button boundaries (assuming centered text/rectangle).
+          const left = btn.x - btn.width / 2;
+          const right = btn.x + btn.width / 2;
+          const top = btn.y - btn.height / 2;
+          const bottom = btn.y + btn.height / 2;
+
+          if (mouseX >= left && mouseX <= right && mouseY >= top && mouseY <= bottom) {
+            // If "Start Game" is clicked, call the callback.
+            if (btn.text === "Start Game") {
+              if (this.startCallback) this.startCallback();
+            }
+            // You can add actions for "Options" or "Quit" here.
+            break;
+          }
+        }
+    }
+
+    render() {
+        // Clear the canvas
+        this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Draw background image if loaded
+        if (this.bgImg.complete && this.bgImg.naturalHeight !== 0) {
+            // Draw image to fill canvas while maintaining aspect ratio
+            const imgRatio = this.bgImg.width / this.bgImg.height;
+            const canvasRatio = this.canvas.width / this.canvas.height;
+            
+            let drawWidth, drawHeight, offsetX, offsetY;
+            
+            if (imgRatio > canvasRatio) {
+                // Image is wider than canvas relative to height
+                drawHeight = this.canvas.height;
+                drawWidth = drawHeight * imgRatio;
+                offsetX = (this.canvas.width - drawWidth) / 2;
+                offsetY = 0;
+            } else {
+                // Image is taller than canvas relative to width
+                drawWidth = this.canvas.width;
+                drawHeight = drawWidth / imgRatio;
+                offsetX = 0;
+                offsetY = (this.canvas.height - drawHeight) / 2;
+            }
+            
+            this.context.drawImage(
+                this.bgImg, 
+                0, 0, this.bgImg.width, this.bgImg.height,
+                offsetX, offsetY, drawWidth, drawHeight
+            );
+        } else {
+            // Fallback background if image not loaded
+            this.context.fillStyle = "#222";
+            this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        }
+
+        // Rest of your rendering code...
+        this.context.fillStyle = "#fff";
+        this.context.font = "72px Arial";
+        this.context.textAlign = "center";
+        this.context.fillText("Piece Perfect", this.canvas.width / 2, 100);
+
+        // Draw buttons...
+        for (let btn of this.buttons) {
+            const left = btn.x - btn.width / 2;
+            const top = btn.y - btn.height / 2;
+
+            this.context.fillStyle = "#555";
+            this.context.fillRect(left, top, btn.width, btn.height);
+
+            this.context.strokeStyle = "#fff";
+            this.context.lineWidth = 3;
+            this.context.strokeRect(left, top, btn.width, btn.height);
+
+            this.context.fillStyle = "#fff";
+            this.context.font = "24px Arial";
+            this.context.fillText(btn.text, btn.x, btn.y + 8);
+        }
+    }
+
+    update() {
+        // For simple menus the render() call is enough.
+        // If you need animations, update logic can be added here.
+        this.render();
+    }         
+}
+
+
 window.addEventListener('load', () => {
     const canvas = document.getElementById('canvas');
     const context = canvas.getContext('2d');
-    canvas.width = window.innerWidth - 200;
-    canvas.height = window.innerHeight - 200;
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
     
-    const game = new Game(canvas, context, 'IMG/puzzle-image.jpg', 2, 3);
+    // Create an instance of the MainMenu.
+    const mainMenu = new MainMenu(canvas, context, () => {
+        // This callback is called when "Start Game" is clicked.
+        // Remove or hide the menu and initialize the game.
+        // For instance, clear the menu event listeners if needed.
+        canvas.removeEventListener("click", mainMenu.handleClick);
+        
+        // Create your Game instance (using your existing Game class).
+        const game = new Game(canvas, context, "IMG/pirates_1920.jpg", 2, 3);
+        // Optionally, start an animation loop or call game.render() periodically.
+    });
 
+      // Render the main menu.
+      // You could also set up an animation loop if your menu needs to be continuously updated.
+    mainMenu.render();
 });
+
