@@ -371,6 +371,7 @@ class Game {
                 break;
             }
         }
+        // this.handleOverlappingPieces(this.draggingPiece);
         this.render();
         
         // Check pieces in reverse order (top-most first)
@@ -387,7 +388,7 @@ class Game {
                 break;
             }
         }
-        // Save initial position when starting to drag
+    
         this.saveState();
     }
 
@@ -401,20 +402,16 @@ class Game {
         const offsetX = (event.clientX - rect.left) * scaleX;
         const offsetY = (event.clientY - rect.top) * scaleY;
         
-        // this.draggingPiece.x = offsetX - this.offsetX;
-        // this.draggingPiece.y = offsetY - this.offsetY;
-
-        // Keep piece within canvas bounds
+        // Update dragging piece's position with clamping
         this.draggingPiece.x = Math.max(0, Math.min(
             this.canvas.width - this.draggingPiece.width, 
             offsetX - this.offsetX
         ));
-
         this.draggingPiece.y = Math.max(0, Math.min(
             this.canvas.height - this.draggingPiece.height, 
             offsetY - this.offsetY
         ));
-
+        
         // this.needsRender = true;
         this.render();
     }
@@ -426,36 +423,87 @@ class Game {
         );
     }
 
+    // checkCollision(pieceA, pieceB) {
+    //     return !(pieceA.x >= pieceB.x + pieceB.width ||
+    //              pieceA.x + pieceA.width <= pieceB.x ||
+    //              pieceA.y >= pieceB.y + pieceB.height ||
+    //              pieceA.y + pieceA.height <= pieceB.y);
+    // }
+    checkCollision(pieceA, pieceB) {
+        // Check if pieceA is exactly on top of pieceB
+        return (
+            // Check if pieceA's bottom edge is at the same position as pieceB's top edge
+            pieceA.y + pieceA.height === pieceB.y &&
+            // Check if there's horizontal overlap between the pieces
+            pieceA.x < pieceB.x + pieceB.width &&
+            pieceA.x + pieceA.width > pieceB.x
+        );
+    }
+
+   handleOverlappingPieces(movedPiece) {
+        // Calculate the dimensions of a single cell.
+        const pieceWidth = this.drawWidth / this.cols;
+        const pieceHeight = this.drawHeight / this.rows;
+
+        // Helper: use Math.floor to compute the cell index reliably.
+        // Optionally, add half the piece dimension to get a center-based cell calculation.
+        const getCell = (piece) => {
+            const col = Math.floor((piece.x - this.drawX + pieceWidth / 2) / pieceWidth);
+            const row = Math.floor((piece.y - this.drawY + pieceHeight / 2) / pieceHeight);
+            return { col, row };
+        };
+
+        // Get the grid cell of the moved piece (which is already snapped).
+        const movedCell = getCell(movedPiece);
+
+        // Loop through all pieces to detect overlaps.
+        for (let piece of this.pieces) {
+            if (piece === movedPiece) continue;
+
+            const cell = getCell(piece);
+            if (cell.col === movedCell.col && cell.row === movedCell.row) {
+                // Overlap is detected.
+                // Move the overlapped piece outside of the grid to the right.
+                // Here, we position it just a few pixels to the right of the grid boundary.
+                const offset = 10; // adjust as needed
+                piece.x = this.drawX + this.drawWidth + offset;
+                // Optionally, align its y coordinate with its current grid row.
+                piece.y = cell.row * pieceHeight + this.drawY;
+            }
+        }
+    }
+
+
     onMouseUp() {
         if (!this.draggingPiece) return;
 
-         // Calculate grid dimensions
+        // Calculate grid dimensions
         const pieceWidth = this.drawWidth / this.cols;
         const pieceHeight = this.drawHeight / this.rows;
-        
+
         // Find the nearest grid position to snap to
         const gridX = Math.round((this.draggingPiece.x - this.drawX) / pieceWidth) * pieceWidth + this.drawX;
         const gridY = Math.round((this.draggingPiece.y - this.drawY) / pieceHeight) * pieceHeight + this.drawY;
-        
-        // Snap to the nearest grid, when threshold reached.
+
+        // Snap to the nearest grid if within threshold.
         const threshold = 30;
         const distX = Math.abs(this.draggingPiece.x - gridX);
         const distY = Math.abs(this.draggingPiece.y - gridY);
-
         if (distX < threshold && distY < threshold) {
             this.draggingPiece.x = gridX;
             this.draggingPiece.y = gridY;
         }
 
+        // Handle overlapping pieces after the drop.
+        this.handleOverlappingPieces(this.draggingPiece);
 
-        // Save final position
+        // Save final state
         this.saveState();
-
         this.draggingPiece = null;
         this.render();
 
-        //vectory message
-        if(this.checkVictory()) {
+        // Check victory
+        if (this.checkVictory()) {
             this.showVictoryMessage();
         }
     }
