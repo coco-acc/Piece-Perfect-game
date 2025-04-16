@@ -181,10 +181,10 @@ class PuzzlePiece {
 }
 
 class Game {
-    constructor(canvas, context, imageSrc, rows, cols) {
+    constructor(canvas, context, imageSrc, rows, cols, mode) {
         this.canvas = canvas;
-        this.canvas.width = this.canvas.width -200;
-        this.canvas.height = this.canvas.height -200;
+        this.canvas.width = this.canvas.width;
+        this.canvas.height = this.canvas.height;
         this.context = context;
         this.imageSrc = imageSrc;
         this.rows = rows;
@@ -193,6 +193,7 @@ class Game {
         this.draggingPiece = null;
         this.offsetX = 0;
         this.offsetY = 0;
+        this.mode = mode; //grid or jigsaw
         this.loadImage();
 
         // Undo/redo system
@@ -208,6 +209,10 @@ class Game {
 
         this.gridImg = new Image();
         this.gridImg.src = ('IMG/wood_1920.jpg');
+
+        // Padding above and below the grid
+        this.topPadding = 40;
+        this.bottomPadding = 20;
     }
 
      startTimer() {
@@ -348,15 +353,39 @@ class Game {
             }
             
             // Center the image on canvas
+            // this.drawX = (this.canvas.width - drawWidth) / 2;
+            // this.drawY = (this.canvas.height - drawHeight) / 2;
+            // this.drawWidth = drawWidth;
+            // this.drawHeight = drawHeight;
+
+            // Adjust available height to exclude the padding
+            const availableHeight = this.canvas.height - this.topPadding - this.bottomPadding;
+
+            if (imageAspect > canvasAspect) {
+                drawWidth = this.canvas.width;
+                drawHeight = this.canvas.width / imageAspect;
+            } else {
+                drawHeight = availableHeight;
+                drawWidth = availableHeight * imageAspect;
+            }
+
+            // Center horizontally, and start below topPadding
             this.drawX = (this.canvas.width - drawWidth) / 2;
-            this.drawY = (this.canvas.height - drawHeight) / 2;
+            this.drawY = this.topPadding;  // Starts below the padding area
             this.drawWidth = drawWidth;
             this.drawHeight = drawHeight;
-            
-            this.createJigSawPieces();
-            // this.createPieces();
-            this.startTimer(); // Start timer when pieces are created
 
+            
+             // Choose the appropriate pieces method based on mode.
+            if (this.mode === 'grid') {
+                this.createPieces();
+            } else if (this.mode === 'jigsaw') {
+                this.createJigSawPieces();
+            } else {
+                console.error("Unknown game mode:", this.mode);
+            }
+    
+            this.startTimer(); // Start timer when pieces are created
         };
     }
 
@@ -413,6 +442,8 @@ class Game {
                     pieceWidth, pieceHeight, // Dimensions
                     correctX, correctY       // Correct position
                 );
+
+                piece.imageMargin = 0;
                 this.pieces.push(piece);
             }
         }
@@ -550,9 +581,9 @@ class Game {
         });
 
         document.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && e.key === 'p') {
+            if (e.key === 'p') {
                 this.togglePause();
-            } else if (e.ctrlKey && e.key === 'r') {
+            } else if (e.key === 'r') {
                 this.resumeTimer();
             }
         });
@@ -825,184 +856,378 @@ class Game {
     }
 }
 
+function generateBackgroundImage() {
+    const canvas = document.createElement('canvas');
+    canvas.width = 1920;
+    canvas.height = 1080;
+    const ctx = canvas.getContext('2d');
+    
+    // Create gradient background
+    const gradient = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+    gradient.addColorStop(0, '#1a2a6c');
+    gradient.addColorStop(0.5, '#b21f1f');
+    gradient.addColorStop(1, '#fdbb2d');
+    ctx.fillStyle = gradient;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    // Add subtle noise
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.02)';
+    for (let i = 0; i < 1000; i++) {
+        ctx.fillRect(
+            Math.random() * canvas.width,
+            Math.random() * canvas.height,
+            2, 2
+        );
+    }
+    
+    return canvas.toDataURL('image/png');
+}
+
+// Usage:
+const bgImageUrl = generateBackgroundImage();
+// You can use this URL as src for your background image
+
 class MainMenu {
     constructor(canvas, context, startCallback) {
         this.canvas = canvas;
         this.context = context;
-        this.startCallback = startCallback; // function to call when Start Game is clicked
+        this.startCallback = startCallback;
 
+        // Bind the click handler once and store its reference.
+        this.boundHandleClick = this.handleClick.bind(this);
+        this.canvas.addEventListener("click", this.boundHandleClick);
+
+        this.selectedMode = null; //jigsaw or grid
+        this.imagesLoaded = false;
+        this.imagesToLoad = 4; // Number of images we need to load
+        this.imagesLoadedCount = 0;
+
+        // Load images with callbacks
         this.bgImg = new Image();
-        this.bgImg.src = "IMG/bg.png"; // Make sure this path is correct
-        this.bgImg.onload = () => {
-            this.render(); // Redraw when image loads
-        };
-        this.bgImg.onerror = () => {
-            console.error("Failed to load background image");
-        };
+        this.bgImg.onload = () => this.imageLoaded();
+        this.bgImg.src = "ui/bg.png";
+        // this.bgImg.src = bgImageUrl;
+        
+        this.buttonImg = new Image();
+        this.buttonImg.onload = () => this.imageLoaded();
+        this.buttonImg.src = "ui/btn.png";
+        
+        this.jigsawThumbnail = new Image();
+        // this.jigsawThumbnail.src = "ui/jigsaw_thumb.png";
+        this.jigsawThumbnail.onload = () => this.imageLoaded();
+        this.jigsawThumbnail.src = "ui/jigsawThumpnail.png";
 
-        // Define buttons with centered x positions.
-        // y is set in relation to canvas height.
+        this.gridThumbnail = new Image();
+        // this.gridThumbnail.src = "ui/grid_thumb.png";
+        this.gridThumbnail.onload = () => this.imageLoaded();
+        this.gridThumbnail.src = "ui/gridThumpnail.png";
+
+        this.cardImg = new Image();
+        this.cardImg.src = "ui/btnbig.png";
+
+        // Main buttons
         this.buttons = [
             {                             
                 text: "Start Game",
                 x: (canvas.width / 2) - 220,
-                y: canvas.height / 1.1,
+                y: canvas.height / 1.12,
                 width: 190,
-                height: 50
+                height: 50,
+                visible: true // Initially hidden until mode is selected
             },                                
             {                             
                 text: "Options",
                 x: canvas.width / 2,
-                y: canvas.height / 1.1,
+                y: canvas.height / 1.12,
                 width: 190,
                 height: 50
             },                                
             {                             
                 text: "Help",
                 x: (canvas.width / 2) + 220,
-                y: canvas.height / 1.1,
+                y: canvas.height / 1.12,
                 width: 190,
                 height: 50
-            },                                
+            }                                              
+        ];
+
+        // Game mode selection cards
+        this.gameModes = [
             {                             
-                text: "Grid",
+                text: "Classic Grid",
+                description: "Traditional grid-based puzzle with clean rectangular pieces that snap into place.",
                 x: (canvas.width / 2) - 160,
-                y: canvas.height / 2.2,
+                y: canvas.height / 1.85,
                 width: 300,
-                height: 400
+                height: 400,
+                type: "grid",
+                selected: false
             },                                
             {                             
                 text: "Jigsaw",
+                description: "Challenging interlocking pieces with tabs and blanks that fit together precisely.",
                 x: (canvas.width / 2) + 160,
-                y: canvas.height / 2.2,
+                y: canvas.height / 1.85,
                 width: 300,
-                height: 400
-            }                             
+                height: 400,
+                type: "jigsaw",
+                selected: false
+            }               
         ];
 
         this.addEventListeners();
     }
 
+    imageLoaded() {
+        this.imagesLoadedCount++;
+        if (this.imagesLoadedCount >= this.imagesToLoad) {
+            this.imagesLoaded = true;
+            this.render(); // Render when all images are loaded
+        }
+    }
+
+    // Helper function to wrap text within a width
+    wrapText(context, text, x, y, maxWidth, lineHeight) {
+        const words = text.split(' ');
+        let line = '';
+        let testLine = '';
+        let lineCount = 0;
+        const maxLines = 3; // Maximum lines we want to show
+
+        for (let n = 0; n < words.length; n++) {
+            testLine = line + words[n] + ' ';
+            const metrics = context.measureText(testLine);
+            const testWidth = metrics.width;
+            
+            if (testWidth > maxWidth && n > 0 && lineCount < maxLines - 1) {
+                context.fillText(line, x, y);
+                line = words[n] + ' ';
+                y += lineHeight;
+                lineCount++;
+            } else if (lineCount >= maxLines - 1) {
+                // If we've reached max lines, truncate with ellipsis
+                const ellipsis = '...';
+                let truncatedLine = line + words[n];
+                while (context.measureText(truncatedLine + ellipsis).width > maxWidth && truncatedLine.length > 0) {
+                    truncatedLine = truncatedLine.substring(0, truncatedLine.length - 1);
+                }
+                context.fillText(truncatedLine + ellipsis, x, y);
+                return y + lineHeight;
+            } else {
+                line = testLine;
+            }
+        }
+        context.fillText(line, x, y);
+        return y + lineHeight;
+    }
+
     addEventListeners() {
-        // Bind the event handler so that 'this' refers to MainMenu.
-        this.canvas.addEventListener("click", this.handleClick.bind(this));
+        this.canvas.addEventListener("click", this.boundHandleClick);
+        // this.canvas.addEventListener("click", this.handleClick.bind(this));
     }
 
     handleClick(event) {
-        // Convert the mouse event to canvas coordinates.
+        // Convert event coordinates and determine which UI element was clicked.
         const rect = this.canvas.getBoundingClientRect();
         const scaleX = this.canvas.width / rect.width;
         const scaleY = this.canvas.height / rect.height;
         const mouseX = (event.clientX - rect.left) * scaleX;
         const mouseY = (event.clientY - rect.top) * scaleY;
 
-        for (let btn of this.buttons) {
-          // Determine button boundaries (assuming centered text/rectangle).
-          const left = btn.x - btn.width / 2;
-          const right = btn.x + btn.width / 2;
-          const top = btn.y - btn.height / 2;
-          const bottom = btn.y + btn.height / 2;
-
-          if (mouseX >= left && mouseX <= right && mouseY >= top && mouseY <= bottom) {
-            // If "Start Game" is clicked, call the callback.
-            if (btn.text === "Start Game") {
-              if (this.startCallback) this.startCallback();
+        // Check if a mode card is clicked.
+        for (let mode of this.gameModes) {
+            const left = mode.x - mode.width / 2;
+            const right = mode.x + mode.width / 2;
+            const top = mode.y - mode.height / 2;
+            const bottom = mode.y + mode.height / 2;
+            if (mouseX >= left && mouseX <= right && mouseY >= top && mouseY <= bottom) {
+                this.gameModes.forEach(m => m.selected = false);
+                mode.selected = true;
+                this.selectedMode = mode.type;
+                // Even if it was already visible, this line might be here:
+                this.buttons[0].visible = true;
+                this.render();
+                return;
             }
-            // You can add actions for "Options" or "Quit" here.
-            break;
-          }
+        }
+
+        // Check the main buttons.
+        for (let btn of this.buttons) {
+            // Skip non-visible buttons.
+            if (!btn.visible) continue;
+            const left = btn.x - btn.width / 2;
+            const right = btn.x + btn.width / 2;
+            const top = btn.y - btn.height / 2;
+            const bottom = btn.y + btn.height / 2;
+            if (mouseX >= left && mouseX <= right && mouseY >= top && mouseY <= bottom) {
+                if (btn.text === "Start Game" && this.selectedMode) {
+                    // Call the start callback passing the selected mode.
+                    if (this.startCallback) this.startCallback(this.selectedMode);
+                }
+                return;
+            }
         }
     }
 
     render() {
-        // Clear the canvas
+        // Clear canvas
         this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-        // Draw background image if loaded
+        // Draw background if loaded
         if (this.bgImg.complete && this.bgImg.naturalHeight !== 0) {
-            // Draw image to fill canvas while maintaining aspect ratio
-            const imgRatio = this.bgImg.width / this.bgImg.height;
-            const canvasRatio = this.canvas.width / this.canvas.height;
-            
-            let drawWidth, drawHeight, offsetX, offsetY;
-            
-            if (imgRatio > canvasRatio) {
-                // Image is wider than canvas relative to height
-                drawHeight = this.canvas.height;
-                drawWidth = drawHeight * imgRatio;
-                offsetX = (this.canvas.width - drawWidth) / 2;
-                offsetY = 0;
-            } else {
-                // Image is taller than canvas relative to width
-                drawWidth = this.canvas.width;
-                drawHeight = drawWidth / imgRatio;
-                offsetX = 0;
-                offsetY = (this.canvas.height - drawHeight) / 2;
-            }
-            
-            this.context.drawImage(
-                this.bgImg, 
-                0, 0, this.bgImg.width, this.bgImg.height,
-                offsetX, offsetY, drawWidth, drawHeight
-            );
+            this.context.drawImage(this.bgImg, 0, 0, this.canvas.width, this.canvas.height);
         } else {
-            // Fallback background if image not loaded
+            // Fallback background
             this.context.fillStyle = "#222";
             this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
         }
 
-        // Rest of your rendering code...
+        // Draw title
         this.context.fillStyle = "#fff";
-        this.context.font = "72px Arial";
+        this.context.font = "72px Montserrat";
         this.context.textAlign = "center";
         this.context.fillText("Piece Perfect", this.canvas.width / 2, 100);
 
-        // Draw buttons...
+        // Draw subtitle
+        this.context.font = "24px Montserrat";
+        this.context.fillText("Select your puzzle style", this.canvas.width / 2, 150);
+
+        // Draw game mode cards
+        for (let mode of this.gameModes) {
+            const left = mode.x - mode.width / 2;
+            const top = mode.y - mode.height / 2;
+            
+            // Card background
+            this.context.save();
+            if (mode.selected) {
+                this.context.shadowColor = 'grey';
+                this.context.shadowBlur = 20;
+                this.context.shadowOffsetY = 0;
+                // this.context.fillStyle = "rgba(50, 50, 80, 0.8)";
+
+                this.context.strokeStyle = 'white';
+                this.context.lineWidth = 4;
+                this.context.beginPath();
+                this.context.roundRect(left, top, mode.width, mode.height, 32);
+                this.context.stroke();
+            } 
+            // else {
+                // this.context.fillStyle = "rgba(30, 30, 60, 0.8)";
+            // }
+            
+            // this.context.beginPath();
+            // this.context.roundRect(left, top, mode.width, mode.height, 20);
+            // this.context.fill();
+            this.context.drawImage(this.cardImg, left, top, mode.width, mode.height);
+            this.context.restore();
+            
+            // Card border
+            // this.context.strokeStyle = mode.selected ? "white" : "#555";
+            // this.context.lineWidth = mode.selected ? 4 : 2;
+            // this.context.beginPath();
+            // this.context.roundRect(left, top, mode.width, mode.height, 20);
+            // this.context.stroke();
+
+            // Thumbnail image - only draw if loaded
+            const thumb = mode.type === 'jigsaw' ? this.jigsawThumbnail : this.gridThumbnail;
+            if (thumb.complete && thumb.naturalHeight !== 0) {
+                const thumbHeight = mode.height * 0.6;
+                const thumbWidth = thumbHeight * (thumb.width / thumb.height);
+                this.context.drawImage(
+                    thumb,
+                    mode.x - thumbWidth/2,
+                    top + 20,
+                    thumbWidth,
+                    thumbHeight
+                );
+            }
+
+            // Mode title
+            this.context.fillStyle = "black";
+            this.context.font = "15px Montserrat";
+            this.context.textAlign = "center";
+            this.context.fillText(mode.text, mode.x, top + mode.height * 0.7);
+
+            // Mode description with wrapping
+            this.context.font = "14px Montserrat";
+            this.context.textAlign = "center";
+            const maxTextWidth = mode.width * 0.8;
+            const lineHeight = 20;
+            const startY = top + mode.height * 0.75;
+            
+            this.wrapText(
+                this.context, 
+                mode.description, 
+                mode.x, 
+                startY, 
+                maxTextWidth, 
+                lineHeight
+            );
+        }
+
+        // Draw buttons - only draw button image if loaded
         for (let btn of this.buttons) {
+            if (!btn.visible && btn.text === "Start Game") continue;
+            
             const left = btn.x - btn.width / 2;
             const top = btn.y - btn.height / 2;
 
-            this.context.fillStyle = "#555";
-            this.context.fillRect(left, top, btn.width, btn.height);
-
-            this.context.strokeStyle = "#fff";
-            this.context.lineWidth = 3;
-            this.context.strokeRect(left, top, btn.width, btn.height);
+            if (this.buttonImg.complete && this.buttonImg.naturalHeight !== 0) {
+                this.context.drawImage(this.buttonImg, left, top, btn.width, btn.height);
+            } else {
+                // Fallback button appearance
+                this.context.fillStyle = "#555";
+                this.context.beginPath();
+                this.context.roundRect(left, top, btn.width, btn.height, 10);
+                this.context.fill();
+            }
 
             this.context.fillStyle = "#fff";
-            this.context.font = "24px Arial";
+            this.context.font = "24px Montserrat";
+            this.context.textAlign = "center";
             this.context.fillText(btn.text, btn.x, btn.y + 8);
         }
     }
-
-    update() {
-        // For simple menus the render() call is enough.
-        // If you need animations, update logic can be added here.
-        this.render();
-    }         
 }
 
 
+// window.addEventListener('load', () => {
+//     const canvas = document.getElementById('canvas');
+//     const context = canvas.getContext('2d');
+//     canvas.width = window.innerWidth;
+//     canvas.height = window.innerHeight;
+    
+//     // Create an instance of the MainMenu.
+//     const mainMenu = new MainMenu(canvas, context, () => {
+//         // This callback is called when "Start Game" is clicked.
+//         // Remove or hide the menu and initialize the game.
+//         // For instance, clear the menu event listeners if needed.
+//         canvas.removeEventListener("click", mainMenu.handleClick);
+        
+//         // Create your Game instance (using your existing Game class).
+//         const game = new Game(canvas, context, "IMG/pirates_1920.jpg", 6, 5);
+//         // Optionally, start an animation loop or call game.render() periodically.
+//     });
+
+//       // Render the main menu.
+//       // You could also set up an animation loop if your menu needs to be continuously updated.
+//     mainMenu.render();
+// });
 window.addEventListener('load', () => {
     const canvas = document.getElementById('canvas');
     const context = canvas.getContext('2d');
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
     
-    // Create an instance of the MainMenu.
-    const mainMenu = new MainMenu(canvas, context, () => {
-        // This callback is called when "Start Game" is clicked.
-        // Remove or hide the menu and initialize the game.
-        // For instance, clear the menu event listeners if needed.
-        canvas.removeEventListener("click", mainMenu.handleClick);
-        
-        // Create your Game instance (using your existing Game class).
-        const game = new Game(canvas, context, "IMG/pirates_1920.jpg", 2, 3);
-        // Optionally, start an animation loop or call game.render() periodically.
+    const mainMenu = new MainMenu(canvas, context, (selectedMode) => {
+        // Remove the click listener for the main menu using the stored reference.
+        canvas.removeEventListener("click", mainMenu.boundHandleClick);
+        // Now start your game.
+        const game = new Game(canvas, context, "IMG/pirates_1920.jpg", 5, 6, selectedMode);
+        // Optionally, start your game loop here.
     });
 
-      // Render the main menu.
-      // You could also set up an animation loop if your menu needs to be continuously updated.
     mainMenu.render();
 });
+
 
