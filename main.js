@@ -1036,7 +1036,7 @@ class Game {
     showVictoryMessage() {
         this.pauseTimer();
         this.isGameOver = true;
-        // this.removeEventListeners(); // ✅ NEW: fully unbind events
+        // this.removeEventListeners(); //  NEW: fully unbind events
         this.destroy();
 
         const gameInstance = this;
