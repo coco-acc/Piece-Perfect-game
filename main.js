@@ -1,6 +1,38 @@
+class AssetManager {
+    constructor() {
+        this.images = {};
+        this.loadedCount = 0;
+        this.totalCount = 0;
+        this.onComplete = null;
+    }
+
+    load(name, src) {
+        this.totalCount++;
+        const img = new Image();
+        img.src = src;
+        img.onload = () => {
+            this.loadedCount++;
+            if (this.loadedCount === this.totalCount && this.onComplete) {
+                this.onComplete();
+            }
+        };
+        this.images[name] = img;
+    }
+
+    get(name) {
+        return this.images[name];
+    }
+
+    whenDone(callback) {
+        this.onComplete = callback;
+    }
+}
+
+let assets;
+
 function createJigsawPath(ctx, width, height, tabs) {
-    const tabSize = Math.min(width, height) / 2.5;
-    const bumpSize = Math.min(width, height) / 4; // Size of the bump
+    const tabSize = Math.min(width, height) / 3;
+    const bumpSize = Math.min(width, height) / 3.5; // Size of the bump
 
     ctx.beginPath();
     ctx.moveTo(0, 0);
@@ -765,8 +797,7 @@ class Game {
         // Save current context settings.
         this.context.save();
         
-        // Set the fill style for the grid area.
-        // this.context.fillStyle = '#333'; 
+        // Set the fill style for the grid area. 
         
         // Fill the grid area.
         this.context.save();
@@ -779,7 +810,7 @@ class Game {
         this.context.restore(); // Restore original state
         
         // Now draw the boundary on top of the fill.
-        this.context.strokeStyle = 'white';  // Customize boundary color.
+        this.context.strokeStyle = 'rgba(156, 160, 166, 0.7)';  // Customize boundary color.
         this.context.lineWidth = 3;            // Customize boundary thickness.
         this.context.strokeRect(this.drawX, this.drawY, this.drawWidth, this.drawHeight);
         
@@ -887,13 +918,16 @@ function generateBackgroundImage() {
 const bgImageUrl = generateBackgroundImage();
 // You can use this URL as src for your background image
 
+// === GLOBAL SCREEN CONTEXT ===
+let currentScreen = null;
+
 class MainMenu {
-    constructor(canvas, context, startCallback) {
+    constructor(canvas, context, startCallback, assets) {
         this.canvas = canvas;
         this.context = context;
         this.startCallback = startCallback;
+        this.assets = assets;
 
-        // Bind the click handler once and store its reference.
         this.boundHandleClick = this.handleClick.bind(this);
         this.canvas.addEventListener("click", this.boundHandleClick);
 
@@ -903,27 +937,26 @@ class MainMenu {
         this.imagesLoadedCount = 0;
 
         // Load images with callbacks
-        this.bgImg = new Image();
-        this.bgImg.onload = () => this.imageLoaded();
-        this.bgImg.src = "ui/bg.png";
+        // this.bgImg = this.assets.get("background");
+        // this.bgImg.onload = () => this.imageLoaded();
         // this.bgImg.src = bgImageUrl;
         
-        this.buttonImg = new Image();
-        this.buttonImg.onload = () => this.imageLoaded();
-        this.buttonImg.src = "ui/btn.png";
+        // this.buttonImg = new Image();
+        // this.buttonImg.onload = () => this.imageLoaded();
+        // this.buttonImg.src = "ui/btn.png";
         
-        this.jigsawThumbnail = new Image();
-        // this.jigsawThumbnail.src = "ui/jigsaw_thumb.png";
-        this.jigsawThumbnail.onload = () => this.imageLoaded();
-        this.jigsawThumbnail.src = "ui/jigsawThumpnail.png";
+        // this.jigsawThumbnail = new Image();
+        // // this.jigsawThumbnail.src = "ui/jigsaw_thumb.png";
+        // this.jigsawThumbnail.onload = () => this.imageLoaded();
+        // this.jigsawThumbnail.src = "ui/jigsawThumpnail.png";
 
-        this.gridThumbnail = new Image();
-        // this.gridThumbnail.src = "ui/grid_thumb.png";
-        this.gridThumbnail.onload = () => this.imageLoaded();
-        this.gridThumbnail.src = "ui/gridThumpnail.png";
+        // this.gridThumbnail = new Image();
+        // // this.gridThumbnail.src = "ui/grid_thumb.png";
+        // this.gridThumbnail.onload = () => this.imageLoaded();
+        // this.gridThumbnail.src = "ui/gridThumpnail.png";
 
-        this.cardImg = new Image();
-        this.cardImg.src = "ui/btnbig.png";
+        // this.cardImg = new Image();
+        // this.cardImg.src = "ui/btnbig.png";
 
         // Main buttons
         this.buttons = [
@@ -977,6 +1010,10 @@ class MainMenu {
 
         this.addEventListeners();
     }
+
+    destroy() {
+        this.canvas.removeEventListener("click", this.boundHandleClick);
+      }
 
     imageLoaded() {
         this.imagesLoadedCount++;
@@ -1070,164 +1107,376 @@ class MainMenu {
     }
 
     render() {
-        // Clear canvas
-        this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        const ctx = this.context;
 
-        // Draw background if loaded
-        if (this.bgImg.complete && this.bgImg.naturalHeight !== 0) {
-            this.context.drawImage(this.bgImg, 0, 0, this.canvas.width, this.canvas.height);
+        // Clear canvas
+        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Draw background using assets
+        const bg = this.assets.get("background");
+        if (bg && bg.complete) {
+            ctx.drawImage(bg, 0, 0, this.canvas.width, this.canvas.height);
         } else {
-            // Fallback background
-            this.context.fillStyle = "#222";
-            this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            ctx.fillStyle = "#222";
+            ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         }
 
         // Draw title
-        this.context.fillStyle = "#fff";
-        this.context.font = "72px Montserrat";
-        this.context.textAlign = "center";
-        this.context.fillText("Piece Perfect", this.canvas.width / 2, 100);
+        ctx.fillStyle = "#fff";
+        ctx.font = "72px Montserrat";
+        ctx.textAlign = "center";
+        ctx.fillText("Piece Perfect", this.canvas.width / 2, 100);
 
         // Draw subtitle
-        this.context.font = "24px Montserrat";
-        this.context.fillText("Select your puzzle style", this.canvas.width / 2, 150);
+        ctx.font = "24px Montserrat";
+        ctx.fillText("Select your puzzle style", this.canvas.width / 2, 150);
+
+        const cardImg = this.assets.get("card");
 
         // Draw game mode cards
         for (let mode of this.gameModes) {
             const left = mode.x - mode.width / 2;
             const top = mode.y - mode.height / 2;
-            
-            // Card background
-            this.context.save();
+
+            ctx.save();
             if (mode.selected) {
-                this.context.shadowColor = 'grey';
-                this.context.shadowBlur = 20;
-                this.context.shadowOffsetY = 0;
-                // this.context.fillStyle = "rgba(50, 50, 80, 0.8)";
+                ctx.shadowColor = 'grey';
+                ctx.shadowBlur = 20;
+                ctx.shadowOffsetY = 0;
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 4;
+                ctx.beginPath();
+                ctx.roundRect(left, top, mode.width, mode.height, 32);
+                ctx.stroke();
+            }
 
-                this.context.strokeStyle = 'white';
-                this.context.lineWidth = 4;
-                this.context.beginPath();
-                this.context.roundRect(left, top, mode.width, mode.height, 32);
-                this.context.stroke();
-            } 
-            // else {
-                // this.context.fillStyle = "rgba(30, 30, 60, 0.8)";
-            // }
-            
-            // this.context.beginPath();
-            // this.context.roundRect(left, top, mode.width, mode.height, 20);
-            // this.context.fill();
-            this.context.drawImage(this.cardImg, left, top, mode.width, mode.height);
-            this.context.restore();
-            
-            // Card border
-            // this.context.strokeStyle = mode.selected ? "white" : "#555";
-            // this.context.lineWidth = mode.selected ? 4 : 2;
-            // this.context.beginPath();
-            // this.context.roundRect(left, top, mode.width, mode.height, 20);
-            // this.context.stroke();
+            if (cardImg && cardImg.complete) {
+                ctx.drawImage(cardImg, left, top, mode.width, mode.height);
+            } else {
+                ctx.fillStyle = "rgba(30, 30, 60, 0.8)";
+                ctx.beginPath();
+                ctx.roundRect(left, top, mode.width, mode.height, 20);
+                ctx.fill();
+            }
 
-            // Thumbnail image - only draw if loaded
-            const thumb = mode.type === 'jigsaw' ? this.jigsawThumbnail : this.gridThumbnail;
-            if (thumb.complete && thumb.naturalHeight !== 0) {
+            ctx.restore();
+
+            // Thumbnail
+            let thumbKey = mode.type === "jigsaw" ? "jigsawThumb" : "gridThumb";
+            const thumb = this.assets.get(thumbKey);
+
+            if (thumb && thumb.complete) {
                 const thumbHeight = mode.height * 0.6;
                 const thumbWidth = thumbHeight * (thumb.width / thumb.height);
-                this.context.drawImage(
+                ctx.drawImage(
                     thumb,
-                    mode.x - thumbWidth/2,
+                    mode.x - thumbWidth / 2,
                     top + 20,
                     thumbWidth,
                     thumbHeight
                 );
             }
 
-            // Mode title
-            this.context.fillStyle = "black";
-            this.context.font = "15px Montserrat";
-            this.context.textAlign = "center";
-            this.context.fillText(mode.text, mode.x, top + mode.height * 0.7);
 
-            // Mode description with wrapping
-            this.context.font = "14px Montserrat";
-            this.context.textAlign = "center";
+            // Title
+            ctx.fillStyle = "black";
+            ctx.font = "15px Montserrat";
+            ctx.textAlign = "center";
+            ctx.fillText(mode.text, mode.x, top + mode.height * 0.7);
+
+            // Description
+            ctx.font = "14px Montserrat";
             const maxTextWidth = mode.width * 0.8;
             const lineHeight = 20;
             const startY = top + mode.height * 0.75;
-            
+
             this.wrapText(
-                this.context, 
-                mode.description, 
-                mode.x, 
-                startY, 
-                maxTextWidth, 
+                ctx,
+                mode.description,
+                mode.x,
+                startY,
+                maxTextWidth,
                 lineHeight
             );
         }
 
-        // Draw buttons - only draw button image if loaded
+        // Draw buttons using preloaded button asset
+        const buttonImg = this.assets.get("button");
+
         for (let btn of this.buttons) {
             if (!btn.visible && btn.text === "Start Game") continue;
-            
+
             const left = btn.x - btn.width / 2;
             const top = btn.y - btn.height / 2;
 
-            if (this.buttonImg.complete && this.buttonImg.naturalHeight !== 0) {
-                this.context.drawImage(this.buttonImg, left, top, btn.width, btn.height);
+            if (buttonImg && buttonImg.complete) {
+                ctx.drawImage(buttonImg, left, top, btn.width, btn.height);
             } else {
-                // Fallback button appearance
-                this.context.fillStyle = "#555";
-                this.context.beginPath();
-                this.context.roundRect(left, top, btn.width, btn.height, 10);
-                this.context.fill();
+                ctx.fillStyle = "#555";
+                ctx.beginPath();
+                ctx.roundRect(left, top, btn.width, btn.height, 10);
+                ctx.fill();
             }
 
-            this.context.fillStyle = "#fff";
-            this.context.font = "24px Montserrat";
-            this.context.textAlign = "center";
-            this.context.fillText(btn.text, btn.x, btn.y + 8);
+            ctx.fillStyle = "#fff";
+            ctx.font = "24px Montserrat";
+            ctx.textAlign = "center";
+            ctx.fillText(btn.text, btn.x, btn.y + 8);
         }
     }
 }
 
+class ImageSelectMenu {
+    constructor(canvas, context, mode, startGameCallback) {
+        this.canvas = canvas;
+        this.context = context;
+        this.mode = mode;
+        this.startGameCallback = startGameCallback;
 
-// window.addEventListener('load', () => {
-//     const canvas = document.getElementById('canvas');
-//     const context = canvas.getContext('2d');
-//     canvas.width = window.innerWidth;
-//     canvas.height = window.innerHeight;
-    
-//     // Create an instance of the MainMenu.
-//     const mainMenu = new MainMenu(canvas, context, () => {
-//         // This callback is called when "Start Game" is clicked.
-//         // Remove or hide the menu and initialize the game.
-//         // For instance, clear the menu event listeners if needed.
-//         canvas.removeEventListener("click", mainMenu.handleClick);
+        this.boundHandleClick = this.handleClick.bind(this);
+        this.canvas.addEventListener("click", this.boundHandleClick);
+
+
+        this.uploadedImage = null;
+        // this.setupUploadUI();
+
+        // this.images = [
+        //     { src: "IMG/pieces/image1.jpg", label: "Pirates" },
+        //     { src: "IMG/pieces/image2.jpg", label: "Deer" },
+        //     { src: "IMG/pieces/image3.jpg", label: "Dry woods" }
+        // ];
+        //Load dynamically
+        this.imageFolder = "IMG/pieces/";
+        this.images = [];
+
+        for (let i = 1; i <= 3; i++) {
+            this.images.push({ 
+                src: `${this.imageFolder}image${i}.jpg`, 
+                label: `Image ${i}` 
+            });
+        }
+
+        this.rows = 3;
+        this.cols = 3;
         
-//         // Create your Game instance (using your existing Game class).
-//         const game = new Game(canvas, context, "IMG/pirates_1920.jpg", 6, 5);
-//         // Optionally, start an animation loop or call game.render() periodically.
-//     });
+        this.thumbnails = [];
+        this.loadedCount = 0;
 
-//       // Render the main menu.
-//       // You could also set up an animation loop if your menu needs to be continuously updated.
-//     mainMenu.render();
-// });
-window.addEventListener('load', () => {
-    const canvas = document.getElementById('canvas');
-    const context = canvas.getContext('2d');
+        this.setupUploadUI();
+        this.setupGridSelectors();
+        // this.initThumbnails();
+        this.initThumbnails();  
+    }
+
+      initThumbnails() {
+        for (let imgData of this.images) {
+            const img = new Image();
+            img.src = imgData.src;
+            img.onload = () => {
+                this.loadedCount++;
+                this.render();
+            };
+            this.thumbnails.push({ ...imgData, image: img });
+        }
+    }
+
+    destroy() {
+        this.canvas.removeEventListener("click", this.boundHandleClick);
+        this.rowSelect?.remove();
+        this.colSelect?.remove();
+        this.fileInput?.remove();
+      }
+
+    setupGridSelectors() {
+        this.rowSelect = document.createElement("select");
+        this.colSelect = document.createElement("select");
+
+        [this.rowSelect, this.colSelect].forEach(select => {
+            select.style.position = "absolute";
+            select.style.top = `${this.canvas.height - 150}px`;
+            select.style.fontSize = "18px";
+            select.style.padding = "6px";
+        });
+
+        this.rowSelect.style.left = `${this.canvas.width / 2 - 100}px`;
+        this.colSelect.style.left = `${this.canvas.width / 2 + 10}px`;
+
+        for (let r = 2; r <= 8; r++) {
+            const opt = document.createElement("option");
+            opt.value = r;
+            opt.textContent = `${r} rows`;
+            if (r === 3) opt.selected = true;
+            this.rowSelect.appendChild(opt);
+        }
+
+        for (let c = 2; c <= 8; c++) {
+            const opt = document.createElement("option");
+            opt.value = c;
+            opt.textContent = `${c} cols`;
+            if (c === 3) opt.selected = true;
+            this.colSelect.appendChild(opt);
+        }
+
+        document.body.appendChild(this.rowSelect);
+        document.body.appendChild(this.colSelect);
+
+        this.rowSelect.addEventListener("change", () => {
+            this.rows = parseInt(this.rowSelect.value);
+        });
+
+        this.colSelect.addEventListener("change", () => {
+            this.cols = parseInt(this.colSelect.value);
+        });
+    }
+
+    setupUploadUI() {
+        this.fileInput = document.createElement("input");
+        this.fileInput.type = "file";
+        this.fileInput.accept = "image/*";
+        this.fileInput.style.display = "none";
+
+        this.fileInput.addEventListener("change", (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const url = URL.createObjectURL(file);
+                this.thumbnails.push({
+                    src: url,
+                    label: "Your Image",
+                    image: (() => {
+                        const img = new Image();
+                        img.src = url;
+                        img.onload = () => this.render();
+                        return img;
+                    })()
+                });
+                this.render();
+            }
+        });
+
+        document.body.appendChild(this.fileInput);
+    }
+
+    handleClick(event) {
+        const rect = this.canvas.getBoundingClientRect();
+        const x = (event.clientX - rect.left) * this.canvas.width / rect.width;
+        const y = (event.clientY - rect.top) * this.canvas.height / rect.height;
+
+        const thumbWidth = 300;
+        const thumbHeight = 180;
+        const gap = 40;
+        const startX = (this.canvas.width - (thumbWidth * this.thumbnails.length + gap * (this.thumbnails.length - 1))) / 2;
+        const yPos = this.canvas.height / 2;
+
+        for (let i = 0; i < this.thumbnails.length; i++) {
+            const xPos = startX + i * (thumbWidth + gap);
+            if (x >= xPos && x <= xPos + thumbWidth && y >= yPos && y <= yPos + thumbHeight) {
+                this.canvas.removeEventListener("click", this.boundHandleClick);
+
+                // this.startGameCallback(this.mode, this.thumbnails[i].src);
+                // Remove grid selectors from DOM
+                this.rowSelect.remove();
+                this.colSelect.remove();
+
+                // Launch game
+                this.startGameCallback(this.mode, this.thumbnails[i].src, this.rows, this.cols);
+
+                return;
+            }
+        }
+
+        // Check if "Upload Your Own" button was clicked
+        const uploadBtnX = this.canvas.width / 2 - 100;
+        const uploadBtnY = this.canvas.height - 100;
+        const uploadBtnW = 200;
+        const uploadBtnH = 50;
+
+        if (
+            x >= uploadBtnX && x <= uploadBtnX + uploadBtnW &&
+            y >= uploadBtnY && y <= uploadBtnY + uploadBtnH
+        ) {
+            this.fileInput.click(); // Trigger file chooser
+            return;
+        }
+    }
+
+    render() {
+        const ctx = this.context;
+        ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        ctx.fillStyle = "#111";
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        ctx.fillStyle = "#fff";
+        ctx.font = "48px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("Choose a Picture", this.canvas.width / 2, 100);
+
+        const thumbWidth = 300;
+        const thumbHeight = 180;
+        const gap = 40;
+        const startX = (this.canvas.width - (thumbWidth * this.thumbnails.length + gap * (this.thumbnails.length - 1))) / 2;
+        const yPos = this.canvas.height / 2;
+
+        for (let i = 0; i < this.thumbnails.length; i++) {
+            const imgObj = this.thumbnails[i];
+            const x = startX + i * (thumbWidth + gap);
+
+            if (imgObj.image.complete) {
+                ctx.drawImage(imgObj.image, x, yPos, thumbWidth, thumbHeight);
+            }
+
+            // ctx.fillStyle = "#fff";
+            // ctx.font = "20px Arial";
+            // ctx.fillText(imgObj.label, x + thumbWidth / 2, yPos + thumbHeight + 30);
+        }
+
+        ctx.fillStyle = "#444";
+        ctx.fillRect(this.canvas.width / 2 - 100, this.canvas.height - 100, 200, 50);
+
+        ctx.fillStyle = "#fff";
+        ctx.font = "20px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("Upload Your Own", this.canvas.width / 2, this.canvas.height - 65);
+    }
+}
+
+// === WINDOW LOAD ENTRY ===
+window.addEventListener("load", () => {
+    const canvas = document.getElementById("canvas");
+    const context = canvas.getContext("2d");
     canvas.width = window.innerWidth;
     canvas.height = window.innerHeight;
-    
-    const mainMenu = new MainMenu(canvas, context, (selectedMode) => {
-        // Remove the click listener for the main menu using the stored reference.
-        canvas.removeEventListener("click", mainMenu.boundHandleClick);
-        // Now start your game.
-        const game = new Game(canvas, context, "IMG/pirates_1920.jpg", 5, 6, selectedMode);
-        // Optionally, start your game loop here.
+
+    const assets = new AssetManager();
+    assets.load("background", "ui/bg.png");
+    assets.load("button", "ui/btn.png");
+    assets.load("card", "ui/btnbig.png");
+    assets.load("jigsawThumb", "ui/jigsawThumpnail.png");
+    assets.load("gridThumb", "ui/gridThumpnail.png");
+
+    assets.whenDone(() => {
+        startMainMenu();
     });
 
-    mainMenu.render();
-});
+    function startMainMenu() {
+        if (currentScreen && currentScreen.destroy) currentScreen.destroy();
 
+        const mainMenu = new MainMenu(canvas, context, (selectedMode) => {
+            if (currentScreen && currentScreen.destroy) currentScreen.destroy();
+
+            const imageMenu = new ImageSelectMenu(canvas, context, selectedMode, (mode, imagePath, rows, cols) => {
+                if (currentScreen && currentScreen.destroy) currentScreen.destroy();
+
+                const game = new Game(canvas, context, imagePath, rows, cols, mode);
+                currentScreen = game; // optional for future game teardown
+            }, assets);
+
+            currentScreen = imageMenu;
+            imageMenu.render();
+        }, assets);
+
+        currentScreen = mainMenu;
+        mainMenu.render();
+    }
+});
 
