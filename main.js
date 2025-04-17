@@ -29,6 +29,7 @@ class AssetManager {
 }
 
 let assets;
+let currentScreen = null;
 
 function createJigsawPath(ctx, width, height, tabs) {
     const tabSize = Math.min(width, height) / 3;
@@ -213,7 +214,8 @@ class PuzzlePiece {
 }
 
 class Game {
-    constructor(canvas, context, imageSrc, rows, cols, mode) {
+    constructor(canvas, context, imageSrc, rows, cols, mode, assets) {
+        this.assets = assets;
         this.canvas = canvas;
         this.canvas.width = this.canvas.width;
         this.canvas.height = this.canvas.height;
@@ -238,6 +240,8 @@ class Game {
         this.elapsedTime = 0; // in milliseconds
         this.timerInterval = null;
         this.isTimerRunning = false;
+        this.userPaused = false; // 👈 NEW: true if player clicked "Pause"
+        this.isGameOver = false;
 
         this.gridImg = new Image();
         this.gridImg.src = ('IMG/wood_1920.jpg');
@@ -245,6 +249,15 @@ class Game {
         // Padding above and below the grid
         this.topPadding = 40;
         this.bottomPadding = 20;
+
+        this.buttons = [
+            { label: "Pause", action: "pause" },
+            { label: "Undo", action: "undo" },
+            { label: "Redo", action: "redo" },
+            { label: "Restart", action: "restart" },
+            { label: "Exit", action: "exit" }
+        ];
+
     }
 
      startTimer() {
@@ -268,11 +281,27 @@ class Game {
     togglePause() {
         if (this.isTimerRunning) {
             this.pauseTimer();
+            this.userPaused = true;
+            this.buttons.find(b => b.action === "pause").label = "Resume";
         } else {
             this.resumeTimer();
+            this.userPaused = false;
+            this.buttons.find(b => b.action === "pause").label = "Pause";
         }
+        this.render();
     }
 
+    // togglePause() {
+    //     if (this.isTimerRunning) {
+    //         this.pauseTimer();
+    //         this.buttons.find(b => b.action === "pause").label = "Resume";
+    //     } else {
+    //         this.resumeTimer();
+    //         this.buttons.find(b => b.action === "pause").label = "Pause";
+    //     }
+    //     this.render();
+    // }
+    
     resumeTimer() {
         if (this.isTimerRunning) return;
         
@@ -289,7 +318,8 @@ class Game {
         this.elapsedTime = 0;
         this.startTime = null;
         this.isTimerRunning = false;
-        this.renderTimer(); // Update display
+        // this.renderTimer(); // Update display
+        this.render();
     }
 
     // updateTimer() {
@@ -593,35 +623,78 @@ class Game {
     }
 
     addEventListeners() {
-        // Mouse events
-        this.canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
-        this.canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
-        this.canvas.addEventListener('mouseup', () => this.onMouseUp());
+        // // Mouse events
+        // this.canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
+        // this.canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
+        // this.canvas.addEventListener('mouseup', () => this.onMouseUp());
 
-        // Touch events
-        this.canvas.addEventListener('touchstart', (e) => this.onTouchStart(e));
-        this.canvas.addEventListener('touchmove', (e) => this.onTouchMove(e));
-        this.canvas.addEventListener('touchend', () => this.onTouchEnd());
+        // // Touch events
+        // this.canvas.addEventListener('touchstart', (e) => this.onTouchStart(e));
+        // this.canvas.addEventListener('touchmove', (e) => this.onTouchMove(e));
+        // this.canvas.addEventListener('touchend', () => this.onTouchEnd());
+
+        this.onMouseDown = this.onMouseDown.bind(this);
+        this.onMouseMove = this.onMouseMove.bind(this);
+        this.onMouseUp = this.onMouseUp.bind(this);
+        this.onTouchStart = this.onTouchStart.bind(this);
+        this.onTouchMove = this.onTouchMove.bind(this);
+        this.onTouchEnd = this.onTouchEnd.bind(this);
+        this.keydownHandler = this.handleKeydown.bind(this);
+
+        this.canvas.addEventListener('mousedown', this.onMouseDown);
+        this.canvas.addEventListener('mousemove', this.onMouseMove);
+        this.canvas.addEventListener('mouseup', this.onMouseUp);
+
+        this.canvas.addEventListener('touchstart', this.onTouchStart);
+        this.canvas.addEventListener('touchmove', this.onTouchMove);
+        this.canvas.addEventListener('touchend', this.onTouchEnd);
+
+        document.addEventListener('keydown', this.keydownHandler);
 
         // Add keyboard shortcuts
-        document.addEventListener('keydown', (e) => {
-            if (e.ctrlKey && e.key === 'z') {
-                this.undo();
-            } else if (e.ctrlKey && e.key === 'y') {
-                this.redo();
-            }
-        });
+        // document.addEventListener('keydown', (e) => {
+        //     if (e.ctrlKey && e.key === 'z') {
+        //         this.undo();
+        //     } else if (e.ctrlKey && e.key === 'y') {
+        //         this.redo();
+        //     }
+        // });
 
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'p') {
-                this.togglePause();
-            } else if (e.key === 'r') {
-                this.resumeTimer();
-            }
-        });
+        // document.addEventListener('keydown', (e) => {
+        //     if (e.key === 'p') {
+        //         this.togglePause();
+        //     } else if (e.key === 'r') {
+        //         this.resumeTimer();
+        //     }
+        // });
+    }
+
+    handleKeydown(e) {
+        if (e.ctrlKey && e.key === 'z') {
+            this.undo();
+        } else if (e.ctrlKey && e.key === 'y') {
+            this.redo();
+        } else if (e.key === 'p') {
+            this.togglePause();
+        } else if (e.key === 'r') {
+            this.resumeTimer();
+        }
     }
 
     onTouchStart(e) {
+        if (!this.isTimerRunning && !this.isGameOver) {
+            for (let btn of this.buttons) {
+                if (
+                    offsetX >= btn.x && offsetX <= btn.x + btn.width &&
+                    offsetY >= btn.y && offsetY <= btn.y + btn.height
+                ) {
+                    this.handleButtonAction(btn.action);
+                    return;
+                }
+            }
+            return;
+        }
+
         e.preventDefault();
         const touch = e.touches[0];
         this.onMouseDown(touch);
@@ -638,12 +711,38 @@ class Game {
     }
 
     onMouseDown(event) {
+
         const rect = this.canvas.getBoundingClientRect();
         const scaleX = this.canvas.width / rect.width;
         const scaleY = this.canvas.height / rect.height;
         
         const offsetX = (event.clientX - rect.left) * scaleX;
         const offsetY = (event.clientY - rect.top) * scaleY;
+
+        if (!this.isTimerRunning && !this.isGameOver) {
+            // Still allow button clicks
+            for (let btn of this.buttons) {
+                if (
+                    offsetX >= btn.x && offsetX <= btn.x + btn.width &&
+                    offsetY >= btn.y && offsetY <= btn.y + btn.height
+                ) {
+                    this.handleButtonAction(btn.action);
+                    return;
+                }
+            }
+            return; // 🔒 Block puzzle piece interaction when paused
+        }
+
+        // Check button clicks first
+        for (let btn of this.buttons) {
+            if (
+                offsetX >= btn.x && offsetX <= btn.x + btn.width &&
+                offsetY >= btn.y && offsetY <= btn.y + btn.height
+            ) {
+                this.handleButtonAction(btn.action);
+                return;
+            }
+        }
 
         // Unhighlight all pieces
         this.pieces.forEach(p => p.unhighlight());
@@ -726,7 +825,70 @@ class Game {
         );
     }
 
-   handleOverlappingPieces(movedPiece) {
+    destroy() {
+        if (this._destroyed) return;
+            this._destroyed = true;
+        // Remove canvas mouse events
+        this.canvas.removeEventListener('mousedown', this.onMouseDown);
+        this.canvas.removeEventListener('mousemove', this.onMouseMove);
+        this.canvas.removeEventListener('mouseup', this.onMouseUp);
+
+        // Remove canvas touch events
+        this.canvas.removeEventListener('touchstart', this.onTouchStart);
+        this.canvas.removeEventListener('touchmove', this.onTouchMove);
+        this.canvas.removeEventListener('touchend', this.onTouchEnd);
+
+        // Remove keyboard shortcuts
+        document.removeEventListener('keydown', this.keydownHandler);
+
+        // Stop timer
+        clearInterval(this.timerInterval);
+    }
+
+    handleButtonAction(action) {
+        switch (action) {
+            case "pause":
+                this.togglePause();
+                break;
+            case "undo":
+                this.undo();
+                break;
+            case "redo":
+                this.redo();
+                break;
+            case "restart":
+                if (confirm("Restart the puzzle?")) {
+                    this.resetTimer();
+                    this.pieces = [];
+                    this.loadImage(); // reload same image
+                }
+                break;
+            case "exit":
+                case "exit":
+                    if (confirm("Exit to menu?")) {
+                        this.destroy();
+                        // Use the assets that were passed to the Game constructor
+                        currentScreen = new MainMenu(this.canvas, this.context, (selectedMode) => {
+                            currentScreen.destroy();
+                            currentScreen = new ImageSelectMenu(this.canvas, this.context, 
+                                selectedMode, 
+                                (mode, imagePath, rows, cols) => {
+                                    currentScreen.destroy();
+                                    currentScreen = new Game(this.canvas, this.context, imagePath, rows, cols, 
+                                        mode, this.assets // Pass along the assets
+                                    );
+                                }, 
+                                this.assets // Pass assets to ImageSelectMenu
+                            );
+                            currentScreen.render();
+                        }, this.assets); // Pass assets to MainMenu
+                        currentScreen.render();
+                    }
+                    break;
+        }
+    }
+
+    handleOverlappingPieces(movedPiece) {
         // Calculate the dimensions of a single cell.
         const pieceWidth = this.drawWidth / this.cols;
         const pieceHeight = this.drawHeight / this.rows;
@@ -818,29 +980,118 @@ class Game {
         this.context.restore();
     }
 
+    // showVictoryMessage() {
+    //     this.pauseTimer(); // Stop timer when puzzle is complete
+    //     this.destroy();
+
+    //     this.context.fillStyle = 'rgba(0,0,0,0.7)';
+    //     this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    //     this.context.fillStyle = 'white';
+    //     this.context.font = '48px Arial';
+    //     this.context.textAlign = 'center';
+    //     this.context.fillText('Puzzle Complete!', 
+    //         this.canvas.width/2, 
+    //         this.canvas.height/2
+    //     );
+
+    //     // draw timer
+    //     this.context.fillText(`In ${this.formatTime(this.elapsedTime)}`, 
+    //         this.canvas.width/2, 
+    //         this.canvas.height/2 + 100
+    //     );
+
+    //     this.context.fillText('🎉🎊 congratulations 🏆', 
+    //         this.canvas.width/2, 
+    //         this.canvas.height/2+ 150
+    //     );
+    // }
+    // showVictoryMessage() {
+    //     this.pauseTimer();
+    //     this.isGameOver = true; // ✅ disable all game buttons and interactions
+
+    //     const gameInstance = this; // store a reference
+
+    //     currentScreen = new VictoryScreen(
+    //         this.canvas,
+    //         this.context,
+    //         this.timeElapsed,
+    //         () => {
+    //             gameInstance.destroy(); // ✅ NOW destroy the game
+    //             currentScreen.destroy?.();
+    //             currentScreen = new ImageSelectMenu(
+    //                 this.canvas,
+    //                 this.context,
+    //                 this.mode,
+    //                 (mode, imagePath, rows, cols) => {
+    //                     currentScreen.destroy?.();
+    //                     currentScreen = new Game(this.canvas, this.context, imagePath, rows, cols, mode, this.assets);
+    //                 },
+    //                 this.assets
+    //             );
+    //             currentScreen.render();
+    //         },
+    //         this.assets
+    //     );
+    // }
     showVictoryMessage() {
-        this.pauseTimer(); // Stop timer when puzzle is complete
+        this.pauseTimer();
+        this.isGameOver = true;
+        // this.removeEventListeners(); // ✅ NEW: fully unbind events
+        this.destroy();
 
-        this.context.fillStyle = 'rgba(0,0,0,0.7)';
-        this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
-        this.context.fillStyle = 'white';
-        this.context.font = '48px Arial';
-        this.context.textAlign = 'center';
-        this.context.fillText('Puzzle Complete!', 
-            this.canvas.width/2, 
-            this.canvas.height/2
-        );
+        const gameInstance = this;
 
-        // draw timer
-        this.context.fillText(`In ${this.formatTime(this.elapsedTime)}`, 
-            this.canvas.width/2, 
-            this.canvas.height/2 + 100
+        currentScreen = new VictoryScreen(
+            this.canvas,
+            this.context,
+            this.timeElapsed,
+            () => {
+                gameInstance.destroy(); // destroy after "Play Again"
+                currentScreen.destroy?.();
+                currentScreen = new ImageSelectMenu(
+                    this.canvas,
+                    this.context,
+                    this.mode,
+                    (mode, imagePath, rows, cols) => {
+                        currentScreen.destroy?.();
+                        currentScreen = new Game(this.canvas, this.context, imagePath, rows, cols, mode, this.assets);
+                    },
+                    this.assets
+                );
+                currentScreen.render();
+            },
+            this.assets
         );
+    }
 
-        this.context.fillText('🎉🎊 congratulations 🏆', 
-            this.canvas.width/2, 
-            this.canvas.height/2+ 150
-        );
+    renderButtons() {
+        const ctx = this.context;
+        const buttonWidth = 120;
+        const buttonHeight = 40;
+        const gap = 15;
+
+        const totalHeight = this.buttons.length * buttonHeight + (this.buttons.length - 1) * gap;
+        const startY = (this.canvas.height - totalHeight) / 2;
+        const x = this.drawX - buttonWidth - 30; // left of the grid
+
+        ctx.font = "18px Arial";
+        ctx.textAlign = "center";
+
+        for (let i = 0; i < this.buttons.length; i++) {
+            const btn = this.buttons[i];
+            btn.x = x;
+            btn.y = startY + i * (buttonHeight + gap);
+            btn.width = buttonWidth;
+            btn.height = buttonHeight;
+
+            ctx.fillStyle = "#333";
+            ctx.fillRect(btn.x, btn.y, btn.width, btn.height);
+            ctx.strokeStyle = "#fff";
+            ctx.strokeRect(btn.x, btn.y, btn.width, btn.height);
+
+            ctx.fillStyle = "#fff";
+            ctx.fillText(btn.label, btn.x + btn.width / 2, btn.y + 26);
+        }
     }
 
     render() {
@@ -884,6 +1135,163 @@ class Game {
         this.context.font = '24px Arial';
         this.context.textAlign = 'left';
         this.context.fillText(`Time: ${this.formatTime(this.elapsedTime)}`, 20, 35);
+
+        this.renderButtons();
+
+        if (!this.isTimerRunning && this.userPaused) {
+            this.context.fillStyle = "rgba(0, 0, 0, 0.6)";
+            this.context.fillRect(this.drawX, this.drawY, this.drawWidth, this.drawHeight);
+            
+            this.context.fillStyle = "#fff";
+            this.context.font = "48px Arial";
+            this.context.textAlign = "center";
+            this.context.fillText("PAUSED", this.canvas.width / 2, this.canvas.height / 2);
+        }
+    }
+}
+
+class VictoryScreen {
+    constructor(canvas, context, timeElapsed, onPlayAgain, assets) {
+        this.canvas = canvas;
+        this.context = context;
+        this.timeElapsed = timeElapsed;
+        this.onPlayAgain = onPlayAgain;
+        this.assets = assets;
+
+        this.playButton = null;
+        this.backButton = null;
+
+        this.boundClick = this.handleClick.bind(this);
+        this.canvas.addEventListener('click', this.boundClick);
+
+        this.render();
+    }
+
+    getStarRating() {
+        // Simple scoring based on time (you can customize this!)
+        if (this.timeElapsed < 30) return 3;
+        if (this.timeElapsed < 60) return 2;
+        return 1;
+    }
+
+    // handleClick(event) {
+    //     const rect = this.canvas.getBoundingClientRect();
+    //     const x = event.clientX - rect.left;
+    //     const y = event.clientY - rect.top;
+
+    //     const btn = this.playButton;
+    //     if (
+    //         x >= btn.x && x <= btn.x + btn.width &&
+    //         y >= btn.y && y <= btn.y + btn.height
+    //     ) {
+    //         this.destroy(); // 👈 clean up victory screen
+    //         this.onPlayAgain();
+    //     }
+    // }
+    handleClick(event) {
+        const rect = this.canvas.getBoundingClientRect();
+        const x = event.clientX - rect.left;
+        const y = event.clientY - rect.top;
+
+        const btn = this.playButton;
+        if (x >= btn.x && x <= btn.x + btn.width && y >= btn.y && y <= btn.y + btn.height) {
+            this.destroy();
+            this.onPlayAgain();
+            return;
+        }
+
+        const back = this.backButton;
+        if (x >= back.x && x <= back.x + back.width && y >= back.y && y <= back.y + back.height) {
+            this.destroy();
+            // 🔙 Transition back to Main Menu
+            currentScreen = new MainMenu(this.canvas, this.context, (selectedMode) => {
+                currentScreen.destroy?.();
+                currentScreen = new ImageSelectMenu(this.canvas, this.context, selectedMode, (mode, imagePath, rows, cols) => {
+                    currentScreen.destroy?.();
+                    currentScreen = new Game(this.canvas, this.context, imagePath, rows, cols, mode, this.assets);
+                }, this.assets);
+                currentScreen.render();
+            }, this.assets);
+            currentScreen.render();
+        }
+    }
+
+    destroy() {
+        this.canvas.removeEventListener('click', this.boundClick);
+    }
+
+    render() {
+        const ctx = this.context;
+
+        ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        ctx.fillStyle = "#fff";
+        ctx.font = "48px Arial";
+        ctx.textAlign = "center";
+        ctx.fillText("🎉 You Did It!", this.canvas.width / 2, 100);
+
+        const rating = this.getStarRating();
+
+        // Draw stars
+        const starSize = 60;
+        const totalWidth = rating * starSize + (rating - 1) * 10;
+        const startX = (this.canvas.width - totalWidth) / 2;
+        const y = 160;
+
+        for (let i = 0; i < rating; i++) {
+            ctx.fillStyle = "gold";
+            ctx.beginPath();
+            ctx.moveTo(startX + i * (starSize + 10) + starSize / 2, y);
+            for (let j = 0; j < 5; j++) {
+                const angle = (Math.PI / 5) * (2 * j + 1);
+                const x = Math.cos(angle) * (starSize / 2);
+                const yy = Math.sin(angle) * (starSize / 2);
+                ctx.lineTo(startX + i * (starSize + 10) + starSize / 2 + x, y + yy);
+            }
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // Show time
+        ctx.fillStyle = "#fff";
+        ctx.font = "24px Arial";
+        ctx.fillText(`Time: ${this.timeElapsed}s`, this.canvas.width / 2, y + 100);
+
+        // Play again button
+        const buttonWidth = 200;
+        const buttonHeight = 60;
+        const buttonX = (this.canvas.width - buttonWidth) / 2;
+        const buttonY = y + 160;
+
+        ctx.fillStyle = "#444";
+        ctx.fillRect(buttonX, buttonY, buttonWidth, buttonHeight);
+        ctx.strokeStyle = "#fff";
+        ctx.strokeRect(buttonX, buttonY, buttonWidth, buttonHeight);
+
+        ctx.fillStyle = "#fff";
+        ctx.font = "26px Arial";
+        ctx.fillText("Play Again", this.canvas.width / 2, buttonY + 40);
+
+        this.playButton = { x: buttonX, y: buttonY, width: buttonWidth, height: buttonHeight };
+
+        // Back to Menu button
+        const backWidth = 200;
+        const backHeight = 60;
+        const backX = (this.canvas.width - backWidth) / 2;
+        const backY = buttonY + 80;
+
+        ctx.fillStyle = "#444";
+        ctx.fillRect(backX, backY, backWidth, backHeight);
+        ctx.strokeStyle = "#fff";
+        ctx.strokeRect(backX, backY, backWidth, backHeight);
+
+        ctx.fillStyle = "#fff";
+        ctx.font = "24px Arial";
+        ctx.fillText("Back to Menu", this.canvas.width / 2, backY + 40);
+
+        // Save for click detection
+        this.backButton = { x: backX, y: backY, width: backWidth, height: backHeight };
     }
 }
 
@@ -919,7 +1327,6 @@ const bgImageUrl = generateBackgroundImage();
 // You can use this URL as src for your background image
 
 // === GLOBAL SCREEN CONTEXT ===
-let currentScreen = null;
 
 class MainMenu {
     constructor(canvas, context, startCallback, assets) {
@@ -1458,6 +1865,15 @@ window.addEventListener("load", () => {
         startMainMenu();
     });
 
+    currentScreen = new MainMenu(this.canvas, this.context, (selectedMode) => {
+        currentScreen.destroy();
+        currentScreen = new ImageSelectMenu(this.canvas, this.context, selectedMode, (mode, imagePath, rows, cols) => {
+            currentScreen.destroy();
+            currentScreen = new Game(this.canvas, this.context, imagePath, rows, cols, mode, this.assets);
+        }, assets);
+        currentScreen.render();
+    }, assets); // <<<<< This is the fix
+
     function startMainMenu() {
         if (currentScreen && currentScreen.destroy) currentScreen.destroy();
 
@@ -1467,7 +1883,7 @@ window.addEventListener("load", () => {
             const imageMenu = new ImageSelectMenu(canvas, context, selectedMode, (mode, imagePath, rows, cols) => {
                 if (currentScreen && currentScreen.destroy) currentScreen.destroy();
 
-                const game = new Game(canvas, context, imagePath, rows, cols, mode);
+                const game = new Game(canvas, context, imagePath, rows, cols, mode, assets);
                 currentScreen = game; // optional for future game teardown
             }, assets);
 
