@@ -433,61 +433,6 @@ class Game {
         }
     }
 
-    // loadImage() {
-    //     this.image = new Image();
-    //     this.image.src = this.imageSrc;
-    //     this.image.onload = () => {
-    //         // Calculate the aspect ratio and scale the image to fit canvas
-    //         const canvasAspect = this.canvas.width / this.canvas.height;
-    //         const imageAspect = this.image.width / this.image.height;
-            
-    //         let drawWidth, drawHeight;
-    //         if (imageAspect > canvasAspect) {
-    //             // Image is wider than canvas (relative to height)
-    //             drawWidth = this.canvas.width;
-    //             drawHeight = this.canvas.width / imageAspect;
-    //         } else {
-    //             // Image is taller than canvas (relative to width)
-    //             drawHeight = this.canvas.height;
-    //             drawWidth = this.canvas.height * imageAspect;
-    //         }
-            
-    //         // Center the image on canvas
-    //         // this.drawX = (this.canvas.width - drawWidth) / 2;
-    //         // this.drawY = (this.canvas.height - drawHeight) / 2;
-    //         // this.drawWidth = drawWidth;
-    //         // this.drawHeight = drawHeight;
-
-    //         // Adjust available height to exclude the padding
-    //         const availableHeight = this.canvas.height - this.topPadding - this.bottomPadding;
-
-    //         if (imageAspect > canvasAspect) {
-    //             drawWidth = this.canvas.width;
-    //             drawHeight = this.canvas.width / imageAspect;
-    //         } else {
-    //             drawHeight = availableHeight;
-    //             drawWidth = availableHeight * imageAspect;
-    //         }
-
-    //         // Center horizontally, and start below topPadding
-    //         this.drawX = (this.canvas.width - drawWidth) / 2;
-    //         this.drawY = this.topPadding;  // Starts below the padding area
-    //         this.drawWidth = drawWidth;
-    //         this.drawHeight = drawHeight;
-
-            
-    //          // Choose the appropriate pieces method based on mode.
-    //         if (this.mode === 'grid') {
-    //             this.createPieces();
-    //         } else if (this.mode === 'jigsaw') {
-    //             this.createJigSawPieces();
-    //         } else {
-    //             console.error("Unknown game mode:", this.mode);
-    //         }
-    
-    //         this.startTimer(); // Start timer when pieces are created
-    //     };
-    // }
     loadImage() {
         this.image = new Image();
         this.image.src = this.imageSrc;
@@ -529,6 +474,20 @@ class Game {
 
     createPieces() {
         // Calculate piece dimensions based on scaled image
+        // const pieceWidth = this.drawWidth / this.cols;
+        // const pieceHeight = this.drawHeight / this.rows;
+        
+        // // Generate all possible positions (initially in correct order)
+        // let shuffledPositions = [];
+        // for (let row = 0; row < this.rows; row++) {
+        //     for (let col = 0; col < this.cols; col++) {
+        //         shuffledPositions.push({ 
+        //             x: this.drawX + col * pieceWidth, 
+        //             y: this.drawY + row * pieceHeight 
+        //         });
+        //     }
+        // }
+         // Calculate piece dimensions based on scaled image
         const pieceWidth = this.drawWidth / this.cols;
         const pieceHeight = this.drawHeight / this.rows;
         
@@ -542,6 +501,26 @@ class Game {
                 });
             }
         }
+        
+        // Shuffle until no piece is in its correct position
+        let validShuffle = false;
+        while (!validShuffle) {
+            shuffledPositions = shuffledPositions.sort(() => Math.random() - 0.5);
+            validShuffle = true;
+            
+            // Check if any piece is in its correct position
+            for (let i = 0; i < shuffledPositions.length; i++) {
+                const correctX = this.drawX + (i % this.cols) * pieceWidth;
+                const correctY = this.drawY + Math.floor(i / this.cols) * pieceHeight;
+                
+                if (Math.abs(shuffledPositions[i].x - correctX) < 2 && 
+                    Math.abs(shuffledPositions[i].y - correctY) < 2) {
+                    validShuffle = false;
+                    break;
+                }
+            }
+        }
+
         // Shuffle the positions
         shuffledPositions = shuffledPositions.sort(() => Math.random() - 0.5);
 
@@ -611,6 +590,17 @@ class Game {
         }
 
         // Generate the target (correct) positions for each piece.
+        // const correctPositions = [];
+        // for (let row = 0; row < this.rows; row++) {
+        //     for (let col = 0; col < this.cols; col++) {
+        //         correctPositions.push({
+        //             x: this.drawX + col * pieceWidth,
+        //             y: this.drawY + row * pieceHeight
+        //         });
+        //     }
+        // }
+        // Shuffle positions for initial placement.
+        // const shuffledPositions = correctPositions.slice().sort(() => Math.random() - 0.5);
         const correctPositions = [];
         for (let row = 0; row < this.rows; row++) {
             for (let col = 0; col < this.cols; col++) {
@@ -620,8 +610,26 @@ class Game {
                 });
             }
         }
-        // Shuffle positions for initial placement.
-        const shuffledPositions = correctPositions.slice().sort(() => Math.random() - 0.5);
+        
+        // Shuffle until no piece is in its correct position
+        let shuffledPositions = [];
+        let validShuffle = false;
+        
+        while (!validShuffle) {
+            shuffledPositions = [...correctPositions].sort(() => Math.random() - 0.5);
+            validShuffle = true;
+            
+            for (let i = 0; i < shuffledPositions.length; i++) {
+                const correctPos = correctPositions[i];
+                const shuffledPos = shuffledPositions[i];
+                
+                if (Math.abs(shuffledPos.x - correctPos.x) < 2 && 
+                    Math.abs(shuffledPos.y - correctPos.y) < 2) {
+                    validShuffle = false;
+                    break;
+                }
+            }
+        }
 
         // Define an extra margin used only for the drawn image (the tabs).
         // This margin will be added to the offscreen canvas, but not to the collision area.
@@ -1158,8 +1166,8 @@ class Game {
         this.pieces.forEach(piece => piece.draw(this.context));
         
         // Draw the timer overlay.
-        this.context.fillStyle = 'rgba(0, 0, 0, 0.5)';
-        this.context.fillRect(10, 10, 120, 40);
+        // this.context.fillStyle = 'rgba(0, 0, 0, 0.5)';
+        // this.context.fillRect(10, 10, 120, 40);
         this.context.fillStyle = 'white';
         this.context.font = '24px Arial';
         this.context.textAlign = 'left';
