@@ -31,6 +31,55 @@ class AssetManager {
 let assets;
 let currentScreen = null;
 
+function drawButton(ctx, btn, isHovered = false, assets) {
+    const buttonImg = assets.get("button");
+
+    if (buttonImg && buttonImg.complete) {
+        if (isHovered) {
+            ctx.filter = "brightness(1.4)";
+        }
+
+        ctx.drawImage(buttonImg, btn.x, btn.y, btn.width, btn.height);
+        ctx.filter = "none";
+    } else {
+        // Fallback if image not loaded
+        ctx.fillStyle = isHovered ? "#666" : "#333";
+        ctx.fillRect(btn.x, btn.y, btn.width, btn.height);
+        ctx.strokeStyle = "#fff";
+        ctx.strokeRect(btn.x, btn.y, btn.width, btn.height);
+    }
+
+    ctx.fillStyle = "#fff";
+    ctx.font = "18px Arial";
+    ctx.textAlign = "center";
+    // ctx.fillText(btn.label || btn.text, btn.x + btn.width / 2, btn.y + 26);
+    ctx.fillText(btn.label || btn.text, btn.x + btn.width / 2, btn.y + btn.height / 2 + 6);
+
+}
+
+function enableButtonHoverTracking(instance) {
+    instance.hoveredButton = null;
+
+    instance._onMouseMove = function(event) {
+        const rect = instance.canvas.getBoundingClientRect();
+        const x = (event.clientX - rect.left) * (instance.canvas.width / rect.width);
+        const y = (event.clientY - rect.top) * (instance.canvas.height / rect.height);
+
+        instance.hoveredButton = instance.buttons.find(btn =>
+            x >= btn.x && x <= btn.x + btn.width &&
+            y >= btn.y && y <= btn.y + btn.height
+        );
+
+        instance.render?.();
+    };
+
+    instance.canvas.addEventListener("mousemove", instance._onMouseMove);
+}
+
+function getBestTimeKey(mode, rows, cols, imageSrc) {
+    return `bestTime_${mode}_${rows}x${cols}_${imageSrc}`;
+}
+
 function createJigsawPath(ctx, width, height, tabs) {
     const tabSize = Math.min(width, height) / 3;
     const bumpSize = Math.min(width, height) / 3.5; // Size of the bump
@@ -214,7 +263,7 @@ class PuzzlePiece {
 }
 
 class Game {
-    constructor(canvas, context, imageSrc, rows, cols, mode, assets) {
+    constructor(canvas, context, imageSrc, rows, cols, mode, assets, ImagePaths) {
         this.assets = assets;
         this.canvas = canvas;
         this.canvas.width = this.canvas.width;
@@ -223,6 +272,10 @@ class Game {
         this.imageSrc = imageSrc;
         this.rows = rows;
         this.cols = cols;
+        this.imagePaths = ImagePaths;
+
+        this.hoveredButton = null;
+
         this.pieces = [];
         this.draggingPiece = null;
         this.offsetX = 0;
@@ -234,21 +287,22 @@ class Game {
         this.history = [];       // Stores all game states
         this.currentState = -1;  // Points to current state in history
         this.maxStates = 20;     // Limit history size
+        this.folderImageCount = 3;
 
         //time tracking
         this.startTime = null;
         this.elapsedTime = 0; // in milliseconds
+
         this.timerInterval = null;
         this.isTimerRunning = false;
         this.userPaused = false; // 👈 NEW: true if player clicked "Pause"
         this.isGameOver = false;
 
-        this.gridImg = new Image();
-        this.gridImg.src = ('IMG/wood_1920.jpg');
+        this.gridImg = assets.get("wood")
 
         // Padding above and below the grid
         this.topPadding = 40;
-        this.bottomPadding = 20;
+        this.bottomPadding = 40;
 
         this.buttons = [
             { label: "Pause", action: "pause" },
@@ -273,7 +327,6 @@ class Game {
 
     pauseTimer() {
         if (!this.isTimerRunning) return;
-        
         clearInterval(this.timerInterval);
         this.isTimerRunning = false;
     }
@@ -290,17 +343,6 @@ class Game {
         }
         this.render();
     }
-
-    // togglePause() {
-    //     if (this.isTimerRunning) {
-    //         this.pauseTimer();
-    //         this.buttons.find(b => b.action === "pause").label = "Resume";
-    //     } else {
-    //         this.resumeTimer();
-    //         this.buttons.find(b => b.action === "pause").label = "Pause";
-    //     }
-    //     this.render();
-    // }
     
     resumeTimer() {
         if (this.isTimerRunning) return;
@@ -322,10 +364,6 @@ class Game {
         this.render();
     }
 
-    // updateTimer() {
-    //     this.elapsedTime = Date.now() - this.startTime;
-    //     this.renderTimer();
-    // }
     updateTimer() {
         this.elapsedTime = Date.now() - this.startTime;
         // Trigger a full render of the game including the updated timer.
@@ -395,50 +433,88 @@ class Game {
         }
     }
 
+    // loadImage() {
+    //     this.image = new Image();
+    //     this.image.src = this.imageSrc;
+    //     this.image.onload = () => {
+    //         // Calculate the aspect ratio and scale the image to fit canvas
+    //         const canvasAspect = this.canvas.width / this.canvas.height;
+    //         const imageAspect = this.image.width / this.image.height;
+            
+    //         let drawWidth, drawHeight;
+    //         if (imageAspect > canvasAspect) {
+    //             // Image is wider than canvas (relative to height)
+    //             drawWidth = this.canvas.width;
+    //             drawHeight = this.canvas.width / imageAspect;
+    //         } else {
+    //             // Image is taller than canvas (relative to width)
+    //             drawHeight = this.canvas.height;
+    //             drawWidth = this.canvas.height * imageAspect;
+    //         }
+            
+    //         // Center the image on canvas
+    //         // this.drawX = (this.canvas.width - drawWidth) / 2;
+    //         // this.drawY = (this.canvas.height - drawHeight) / 2;
+    //         // this.drawWidth = drawWidth;
+    //         // this.drawHeight = drawHeight;
+
+    //         // Adjust available height to exclude the padding
+    //         const availableHeight = this.canvas.height - this.topPadding - this.bottomPadding;
+
+    //         if (imageAspect > canvasAspect) {
+    //             drawWidth = this.canvas.width;
+    //             drawHeight = this.canvas.width / imageAspect;
+    //         } else {
+    //             drawHeight = availableHeight;
+    //             drawWidth = availableHeight * imageAspect;
+    //         }
+
+    //         // Center horizontally, and start below topPadding
+    //         this.drawX = (this.canvas.width - drawWidth) / 2;
+    //         this.drawY = this.topPadding;  // Starts below the padding area
+    //         this.drawWidth = drawWidth;
+    //         this.drawHeight = drawHeight;
+
+            
+    //          // Choose the appropriate pieces method based on mode.
+    //         if (this.mode === 'grid') {
+    //             this.createPieces();
+    //         } else if (this.mode === 'jigsaw') {
+    //             this.createJigSawPieces();
+    //         } else {
+    //             console.error("Unknown game mode:", this.mode);
+    //         }
+    
+    //         this.startTimer(); // Start timer when pieces are created
+    //     };
+    // }
     loadImage() {
         this.image = new Image();
         this.image.src = this.imageSrc;
         this.image.onload = () => {
-            // Calculate the aspect ratio and scale the image to fit canvas
+            // Calculate the aspect ratio and scale the image to fit canvas height
             const canvasAspect = this.canvas.width / this.canvas.height;
             const imageAspect = this.image.width / this.image.height;
             
             let drawWidth, drawHeight;
-            if (imageAspect > canvasAspect) {
-                // Image is wider than canvas (relative to height)
-                drawWidth = this.canvas.width;
-                drawHeight = this.canvas.width / imageAspect;
-            } else {
-                // Image is taller than canvas (relative to width)
-                drawHeight = this.canvas.height;
-                drawWidth = this.canvas.height * imageAspect;
-            }
             
-            // Center the image on canvas
-            // this.drawX = (this.canvas.width - drawWidth) / 2;
-            // this.drawY = (this.canvas.height - drawHeight) / 2;
-            // this.drawWidth = drawWidth;
-            // this.drawHeight = drawHeight;
-
-            // Adjust available height to exclude the padding
-            const availableHeight = this.canvas.height - this.topPadding - this.bottomPadding;
-
-            if (imageAspect > canvasAspect) {
+            // Always scale based on height
+            drawHeight = this.canvas.height - this.topPadding - this.bottomPadding;
+            drawWidth = drawHeight * imageAspect;
+            
+            // If the scaled width is wider than canvas, adjust to fit width instead
+            if (drawWidth > this.canvas.width) {
                 drawWidth = this.canvas.width;
-                drawHeight = this.canvas.width / imageAspect;
-            } else {
-                drawHeight = availableHeight;
-                drawWidth = availableHeight * imageAspect;
+                drawHeight = drawWidth / imageAspect;
             }
 
             // Center horizontally, and start below topPadding
             this.drawX = (this.canvas.width - drawWidth) / 2;
-            this.drawY = this.topPadding;  // Starts below the padding area
+            this.drawY = this.topPadding;
             this.drawWidth = drawWidth;
             this.drawHeight = drawHeight;
 
-            
-             // Choose the appropriate pieces method based on mode.
+            // Choose the appropriate pieces method based on mode.
             if (this.mode === 'grid') {
                 this.createPieces();
             } else if (this.mode === 'jigsaw') {
@@ -446,7 +522,7 @@ class Game {
             } else {
                 console.error("Unknown game mode:", this.mode);
             }
-    
+
             this.startTimer(); // Start timer when pieces are created
         };
     }
@@ -623,16 +699,6 @@ class Game {
     }
 
     addEventListeners() {
-        // // Mouse events
-        // this.canvas.addEventListener('mousedown', (e) => this.onMouseDown(e));
-        // this.canvas.addEventListener('mousemove', (e) => this.onMouseMove(e));
-        // this.canvas.addEventListener('mouseup', () => this.onMouseUp());
-
-        // // Touch events
-        // this.canvas.addEventListener('touchstart', (e) => this.onTouchStart(e));
-        // this.canvas.addEventListener('touchmove', (e) => this.onTouchMove(e));
-        // this.canvas.addEventListener('touchend', () => this.onTouchEnd());
-
         this.onMouseDown = this.onMouseDown.bind(this);
         this.onMouseMove = this.onMouseMove.bind(this);
         this.onMouseUp = this.onMouseUp.bind(this);
@@ -651,22 +717,7 @@ class Game {
 
         document.addEventListener('keydown', this.keydownHandler);
 
-        // Add keyboard shortcuts
-        // document.addEventListener('keydown', (e) => {
-        //     if (e.ctrlKey && e.key === 'z') {
-        //         this.undo();
-        //     } else if (e.ctrlKey && e.key === 'y') {
-        //         this.redo();
-        //     }
-        // });
-
-        // document.addEventListener('keydown', (e) => {
-        //     if (e.key === 'p') {
-        //         this.togglePause();
-        //     } else if (e.key === 'r') {
-        //         this.resumeTimer();
-        //     }
-        // });
+        enableButtonHoverTracking(this);
     }
 
     handleKeydown(e) {
@@ -840,6 +891,8 @@ class Game {
 
         // Remove keyboard shortcuts
         document.removeEventListener('keydown', this.keydownHandler);
+        //remove hover listener
+        this.canvas.removeEventListener("mousemove", this._onMouseMove);
 
         // Stop timer
         clearInterval(this.timerInterval);
@@ -980,88 +1033,64 @@ class Game {
         this.context.restore();
     }
 
-    // showVictoryMessage() {
-    //     this.pauseTimer(); // Stop timer when puzzle is complete
-    //     this.destroy();
-
-    //     this.context.fillStyle = 'rgba(0,0,0,0.7)';
-    //     this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
-    //     this.context.fillStyle = 'white';
-    //     this.context.font = '48px Arial';
-    //     this.context.textAlign = 'center';
-    //     this.context.fillText('Puzzle Complete!', 
-    //         this.canvas.width/2, 
-    //         this.canvas.height/2
-    //     );
-
-    //     // draw timer
-    //     this.context.fillText(`In ${this.formatTime(this.elapsedTime)}`, 
-    //         this.canvas.width/2, 
-    //         this.canvas.height/2 + 100
-    //     );
-
-    //     this.context.fillText('🎉🎊 congratulations 🏆', 
-    //         this.canvas.width/2, 
-    //         this.canvas.height/2+ 150
-    //     );
-    // }
-    // showVictoryMessage() {
-    //     this.pauseTimer();
-    //     this.isGameOver = true; // ✅ disable all game buttons and interactions
-
-    //     const gameInstance = this; // store a reference
-
-    //     currentScreen = new VictoryScreen(
-    //         this.canvas,
-    //         this.context,
-    //         this.timeElapsed,
-    //         () => {
-    //             gameInstance.destroy(); // ✅ NOW destroy the game
-    //             currentScreen.destroy?.();
-    //             currentScreen = new ImageSelectMenu(
-    //                 this.canvas,
-    //                 this.context,
-    //                 this.mode,
-    //                 (mode, imagePath, rows, cols) => {
-    //                     currentScreen.destroy?.();
-    //                     currentScreen = new Game(this.canvas, this.context, imagePath, rows, cols, mode, this.assets);
-    //                 },
-    //                 this.assets
-    //             );
-    //             currentScreen.render();
-    //         },
-    //         this.assets
-    //     );
-    // }
     showVictoryMessage() {
+        this.imagePaths = Array.from({ length: this.folderImageCount }, (_, i) => `IMG/pieces/image${i + 1}.jpg`);
+
         this.pauseTimer();
         this.isGameOver = true;
-        // this.removeEventListeners(); //  NEW: fully unbind events
+
+        //save elapsedTime before destroying game
+        const timer = this.formatTime(this.elapsedTime);
+
+        //save game screen
+        const gameSnapshot = this.canvas.cloneNode();
+        gameSnapshot.getContext("2d").drawImage(this.canvas, 0, 0);
+
+        const key = getBestTimeKey(this.mode, this.rows, this.cols, this.imageSrc);
+        const currentBest = parseInt(localStorage.getItem(key));
+        let bestTime = false;
+
+        if (!currentBest || this.elapsedTime < currentBest) {
+            localStorage.setItem(key, this.elapsedTime);
+            bestTime = true;
+            console.log("🔥 New best time saved:", this.elapsedTime);
+        }
+       
         this.destroy();
-
         const gameInstance = this;
-
         currentScreen = new VictoryScreen(
             this.canvas,
             this.context,
-            this.timeElapsed,
+            timer,
             () => {
-                gameInstance.destroy(); // destroy after "Play Again"
-                currentScreen.destroy?.();
-                currentScreen = new ImageSelectMenu(
-                    this.canvas,
-                    this.context,
-                    this.mode,
-                    (mode, imagePath, rows, cols) => {
-                        currentScreen.destroy?.();
-                        currentScreen = new Game(this.canvas, this.context, imagePath, rows, cols, mode, this.assets);
-                    },
-                    this.assets
-                );
-                currentScreen.render();
-            },
-            this.assets
+            gameInstance.destroy();
+            currentScreen.destroy?.();
+
+            // Pick a new image from a different one
+            const otherImages = this.imagePaths.filter(img => img !== this.imageSrc);
+            const newImage = otherImages[Math.floor(Math.random() * otherImages.length)];
+
+            currentScreen = new Game(
+                this.canvas,
+                this.context,
+                newImage,
+                this.rows,
+                this.cols,
+                this.mode,
+                this.assets,
+                this.imagePaths
+            );
+        },
+        this.assets,
+        this.imagePaths,   // ✅ Fix: pass image list
+        this.imageSrc,     // ✅ Fix: pass current image
+        this.mode,
+        this.rows,
+        this.cols,
+        gameSnapshot, // ✅ New: pass the image
+        bestTime
         );
+
     }
 
     renderButtons() {
@@ -1084,13 +1113,8 @@ class Game {
             btn.width = buttonWidth;
             btn.height = buttonHeight;
 
-            ctx.fillStyle = "#333";
-            ctx.fillRect(btn.x, btn.y, btn.width, btn.height);
-            ctx.strokeStyle = "#fff";
-            ctx.strokeRect(btn.x, btn.y, btn.width, btn.height);
-
-            ctx.fillStyle = "#fff";
-            ctx.fillText(btn.label, btn.x + btn.width / 2, btn.y + 26);
+            const isHovered = this.hoveredButton === btn;
+            drawButton(ctx, btn, isHovered, this.assets);
         }
     }
 
@@ -1102,8 +1126,13 @@ class Game {
         this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
         
         // Draw a global background.
-        this.context.fillStyle = 'black';
-        this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        const bg = this.assets.get("background");
+        if (bg && bg.complete) {
+            this.context.drawImage(bg, 0, 0, this.canvas.width, this.canvas.height);
+        } else {
+            this.context.fillStyle = "#222";
+            this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        }
         
         // Fill the grid background and draw its boundary.
         this.drawGridBackground();
@@ -1137,6 +1166,7 @@ class Game {
         this.context.fillText(`Time: ${this.formatTime(this.elapsedTime)}`, 20, 35);
 
         this.renderButtons();
+        // const isHovered = this.hoveredButton === btn;
 
         if (!this.isTimerRunning && this.userPaused) {
             this.context.fillStyle = "rgba(0, 0, 0, 0.6)";
@@ -1151,20 +1181,78 @@ class Game {
 }
 
 class VictoryScreen {
-    constructor(canvas, context, timeElapsed, onPlayAgain, assets) {
+     constructor(canvas, context, timeElapsed, onPlayAgain, assets,
+        imagePaths, lastImage, mode, rows, cols, backgroundSnapshot, bestTime) {
+
         this.canvas = canvas;
         this.context = context;
         this.timeElapsed = timeElapsed;
         this.onPlayAgain = onPlayAgain;
         this.assets = assets;
+        this.imagePaths = imagePaths; 
+        this.lastImage = lastImage;
+        this.mode = mode;
+        this.rows = rows;
+        this.cols = cols;
+        this.backgroundSnapshot = backgroundSnapshot; // ✅ frozen game view
+        this.bestTime = bestTime;
 
+        // Initialize buttons
+        this.buttons = [];
         this.playButton = null;
         this.backButton = null;
+        this.hoveredButton = null;
 
+        // Bind event handlers
         this.boundClick = this.handleClick.bind(this);
+        this.boundMouseMove = this.handleMouseMove.bind(this);
+        
+        // Add event listeners
         this.canvas.addEventListener('click', this.boundClick);
+        this.canvas.addEventListener('mousemove', this.boundMouseMove);
+
+        this.confetti = [];
+        this.animate = this.animate.bind(this);
+        this.createConfetti();
+        requestAnimationFrame(this.animate);
+        console.log(this.bestTime);
 
         this.render();
+    }
+
+   handleMouseMove(event) {
+        const rect = this.canvas.getBoundingClientRect();
+        const x = (event.clientX - rect.left) * (this.canvas.width / rect.width);
+        const y = (event.clientY - rect.top) * (this.canvas.height / rect.height);
+
+        const prevHovered = this.hoveredButton;
+        let newHovered = null;
+
+        if (this.playButton &&
+            x >= this.playButton.x && x <= this.playButton.x + this.playButton.width &&
+            y >= this.playButton.y && y <= this.playButton.y + this.playButton.height) {
+            newHovered = this.playButton;
+        } else if (this.backButton &&
+            x >= this.backButton.x && x <= this.backButton.x + this.backButton.width &&
+            y >= this.backButton.y && y <= this.backButton.y + this.backButton.height) {
+            newHovered = this.backButton;
+        }
+
+        // if (newHovered !== prevHovered) {
+        //     this.hoveredButton = newHovered;
+        //     this.render(); // Re-render only if hover state changed
+        // }
+    }
+
+    createConfetti() {
+        const colors = ["#ff0", "#f0f", "#0ff", "#0f0", "#f00", "#00f"];
+
+        for (let i = 0; i < 150; i++) {
+            const x = Math.random() * this.canvas.width;
+            const y = Math.random() * this.canvas.height / 2;
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            this.confetti.push(new ConfettiParticle(x, y, color));
+        }
     }
 
     getStarRating() {
@@ -1174,36 +1262,29 @@ class VictoryScreen {
         return 1;
     }
 
-    // handleClick(event) {
-    //     const rect = this.canvas.getBoundingClientRect();
-    //     const x = event.clientX - rect.left;
-    //     const y = event.clientY - rect.top;
-
-    //     const btn = this.playButton;
-    //     if (
-    //         x >= btn.x && x <= btn.x + btn.width &&
-    //         y >= btn.y && y <= btn.y + btn.height
-    //     ) {
-    //         this.destroy(); // 👈 clean up victory screen
-    //         this.onPlayAgain();
-    //     }
-    // }
     handleClick(event) {
         const rect = this.canvas.getBoundingClientRect();
-        const x = event.clientX - rect.left;
-        const y = event.clientY - rect.top;
+        const x = (event.clientX - rect.left) * (this.canvas.width / rect.width);
+        const y = (event.clientY - rect.top) * (this.canvas.height / rect.height);
 
-        const btn = this.playButton;
-        if (x >= btn.x && x <= btn.x + btn.width && y >= btn.y && y <= btn.y + btn.height) {
+        if (this.playButton && 
+            x >= this.playButton.x && x <= this.playButton.x + this.playButton.width &&
+            y >= this.playButton.y && y <= this.playButton.y + this.playButton.height) {
             this.destroy();
-            this.onPlayAgain();
+
+            // Pick a new image that is different from the previous one
+            const otherImages = this.imagePaths.filter(img => img !== this.lastImage);
+            const newImage = otherImages[Math.floor(Math.random() * otherImages.length)];
+
+            currentScreen = new Game(this.canvas, this.context, newImage, this.rows, this.cols, this.mode, this.assets);
             return;
         }
 
-        const back = this.backButton;
-        if (x >= back.x && x <= back.x + back.width && y >= back.y && y <= back.y + back.height) {
+        if (this.backButton && 
+            x >= this.backButton.x && x <= this.backButton.x + this.backButton.width &&
+            y >= this.backButton.y && y <= this.backButton.y + this.backButton.height) {
             this.destroy();
-            // 🔙 Transition back to Main Menu
+            // Transition back to Main Menu
             currentScreen = new MainMenu(this.canvas, this.context, (selectedMode) => {
                 currentScreen.destroy?.();
                 currentScreen = new ImageSelectMenu(this.canvas, this.context, selectedMode, (mode, imagePath, rows, cols) => {
@@ -1216,12 +1297,111 @@ class VictoryScreen {
         }
     }
 
-    destroy() {
+     destroy() {
+        // Remove event listeners
         this.canvas.removeEventListener('click', this.boundClick);
+        this.canvas.removeEventListener('mousemove', this.boundMouseMove);
+        this.confetti = [];
     }
 
-    render() {
+    animate() {
+        // this.render(); // draw the victory screen
+
+        for (let p of this.confetti) {
+            p.update();
+            p.draw(this.context);
+        }
+        this.render(); // draw the victory screen
+
+        this.confetti = this.confetti.filter(p => p.isAlive());
+
+        if (this.confetti.length > 0) {
+            requestAnimationFrame(this.animate);
+        }
+    }
+
+    // render() {
+    //     const ctx = this.context;
+
+    //     ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+    //     ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+    //     ctx.fillStyle = "#fff";
+    //     ctx.font = "48px Arial";
+    //     ctx.textAlign = "center";
+    //     ctx.fillText("🎉 You Did It!", this.canvas.width / 2, 100);
+
+    //     const rating = this.getStarRating();
+
+    //     // Draw stars
+    //     const starSize = 60;
+    //     const totalWidth = rating * starSize + (rating - 1) * 10;
+    //     const startX = (this.canvas.width - totalWidth) / 2;
+    //     const y = 160;
+
+    //     for (let i = 0; i < rating; i++) {
+    //         ctx.fillStyle = "gold";
+    //         ctx.beginPath();
+    //         ctx.moveTo(startX + i * (starSize + 10) + starSize / 2, y);
+    //         for (let j = 0; j < 5; j++) {
+    //             const angle = (Math.PI / 5) * (2 * j + 1);
+    //             const x = Math.cos(angle) * (starSize / 2);
+    //             const yy = Math.sin(angle) * (starSize / 2);
+    //             ctx.lineTo(startX + i * (starSize + 10) + starSize / 2 + x, y + yy);
+    //         }
+    //         ctx.closePath();
+    //         ctx.fill();
+    //     }
+
+    //     // Show time
+    //     ctx.fillStyle = "#fff";
+    //     ctx.font = "24px Arial";
+    //     ctx.fillText(`Time: ${this.timeElapsed}s`, this.canvas.width / 2, y + 100);
+
+    //     // Play again button
+    //     const buttonWidth = 200;
+    //     const buttonHeight = 60;
+    //     const buttonX = (this.canvas.width - buttonWidth) / 2;
+    //     const buttonY = y + 160;
+
+    //     ctx.fillStyle = "#444";
+    //     ctx.fillRect(buttonX, buttonY, buttonWidth, buttonHeight);
+    //     ctx.strokeStyle = "#fff";
+    //     ctx.strokeRect(buttonX, buttonY, buttonWidth, buttonHeight);
+
+    //     ctx.fillStyle = "#fff";
+    //     ctx.font = "26px Arial";
+    //     ctx.fillText("Play Again", this.canvas.width / 2, buttonY + 40);
+
+    //     this.playButton = { x: buttonX, y: buttonY, width: buttonWidth, height: buttonHeight };
+
+    //     // Back to Menu button
+    //     const backWidth = 200;
+    //     const backHeight = 60;
+    //     const backX = (this.canvas.width - backWidth) / 2;
+    //     const backY = buttonY + 80;
+
+    //     ctx.fillStyle = "#444";
+    //     ctx.fillRect(backX, backY, backWidth, backHeight);
+    //     ctx.strokeStyle = "#fff";
+    //     ctx.strokeRect(backX, backY, backWidth, backHeight);
+
+    //     ctx.fillStyle = "#fff";
+    //     ctx.font = "24px Arial";
+    //     ctx.fillText("Back to Menu", this.canvas.width / 2, backY + 40);
+
+    //     // Save for click detection
+    //     this.backButton = { x: backX, y: backY, width: backWidth, height: backHeight };
+    // }
+     render() {
         const ctx = this.context;
+
+        if (this.backgroundSnapshot) {
+            ctx.drawImage(this.backgroundSnapshot, 0, 0, this.canvas.width, this.canvas.height);
+        } else {
+            ctx.fillStyle = "#111";
+            ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        }
 
         ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
         ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
@@ -1258,13 +1438,20 @@ class VictoryScreen {
         ctx.font = "24px Arial";
         ctx.fillText(`Time: ${this.timeElapsed}s`, this.canvas.width / 2, y + 100);
 
+        if (this.bestTime) {
+            ctx.fillStyle = "#00ffcc";
+            ctx.font = "22px Arial";
+            ctx.fillText("🎉 New Best Time!🎉", this.canvas.width / 2, y + 140);
+        }
+
         // Play again button
         const buttonWidth = 200;
         const buttonHeight = 60;
         const buttonX = (this.canvas.width - buttonWidth) / 2;
         const buttonY = y + 160;
 
-        ctx.fillStyle = "#444";
+        // Draw button with hover effect
+        ctx.fillStyle = this.hoveredButton === this.playButton ? "#555" : "#444";
         ctx.fillRect(buttonX, buttonY, buttonWidth, buttonHeight);
         ctx.strokeStyle = "#fff";
         ctx.strokeRect(buttonX, buttonY, buttonWidth, buttonHeight);
@@ -1281,7 +1468,8 @@ class VictoryScreen {
         const backX = (this.canvas.width - backWidth) / 2;
         const backY = buttonY + 80;
 
-        ctx.fillStyle = "#444";
+        // Draw button with hover effect
+        ctx.fillStyle = this.hoveredButton === this.backButton ? "#555" : "#444";
         ctx.fillRect(backX, backY, backWidth, backHeight);
         ctx.strokeStyle = "#fff";
         ctx.strokeRect(backX, backY, backWidth, backHeight);
@@ -1292,8 +1480,51 @@ class VictoryScreen {
 
         // Save for click detection
         this.backButton = { x: backX, y: backY, width: backWidth, height: backHeight };
+
+        // Draw confetti
+        for (let p of this.confetti) {
+            p.draw(ctx);
+        }
     }
 }
+
+class ConfettiParticle {
+    constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        this.size = Math.random() * 6 + 4;
+        this.velocityX = (Math.random() - 0.5) * 8;
+        this.velocityY = Math.random() * -10 - 5;
+        this.gravity = 0.4;
+        this.alpha = 1;
+        this.rotation = Math.random() * 360;
+        this.rotationSpeed = (Math.random() - 0.5) * 10;
+    }
+
+    update() {
+        this.velocityY += this.gravity;
+        this.x += this.velocityX;
+        this.y += this.velocityY;
+        this.rotation += this.rotationSpeed;
+        this.alpha -= 0.01;
+    }
+
+    draw(ctx) {
+        ctx.save();
+        ctx.globalAlpha = this.alpha;
+        ctx.translate(this.x, this.y);
+        ctx.rotate((this.rotation * Math.PI) / 180);
+        ctx.fillStyle = this.color;
+        ctx.fillRect(-this.size / 2, -this.size / 2, this.size, this.size);
+        ctx.restore();
+    }
+
+    isAlive() {
+        return this.alpha > 0;
+    }
+}
+
 
 function generateBackgroundImage() {
     const canvas = document.createElement('canvas');
@@ -1339,31 +1570,11 @@ class MainMenu {
         this.canvas.addEventListener("click", this.boundHandleClick);
 
         this.selectedMode = null; //jigsaw or grid
-        this.imagesLoaded = false;
-        this.imagesToLoad = 4; // Number of images we need to load
-        this.imagesLoadedCount = 0;
+        // this.imagesLoaded = false;
+        // this.imagesToLoad = 12; // Number of images we need to load
+        // this.imagesLoadedCount = 0;
 
-        // Load images with callbacks
-        // this.bgImg = this.assets.get("background");
-        // this.bgImg.onload = () => this.imageLoaded();
-        // this.bgImg.src = bgImageUrl;
-        
-        // this.buttonImg = new Image();
-        // this.buttonImg.onload = () => this.imageLoaded();
-        // this.buttonImg.src = "ui/btn.png";
-        
-        // this.jigsawThumbnail = new Image();
-        // // this.jigsawThumbnail.src = "ui/jigsaw_thumb.png";
-        // this.jigsawThumbnail.onload = () => this.imageLoaded();
-        // this.jigsawThumbnail.src = "ui/jigsawThumpnail.png";
-
-        // this.gridThumbnail = new Image();
-        // // this.gridThumbnail.src = "ui/grid_thumb.png";
-        // this.gridThumbnail.onload = () => this.imageLoaded();
-        // this.gridThumbnail.src = "ui/gridThumpnail.png";
-
-        // this.cardImg = new Image();
-        // this.cardImg.src = "ui/btnbig.png";
+        enableButtonHoverTracking(this);
 
         // Main buttons
         this.buttons = [
@@ -1372,7 +1583,7 @@ class MainMenu {
                 x: (canvas.width / 2) - 220,
                 y: canvas.height / 1.12,
                 width: 190,
-                height: 50,
+                height: 10,
                 visible: true // Initially hidden until mode is selected
             },                                
             {                             
@@ -1380,14 +1591,14 @@ class MainMenu {
                 x: canvas.width / 2,
                 y: canvas.height / 1.12,
                 width: 190,
-                height: 50
+                height: 10
             },                                
             {                             
                 text: "Help",
                 x: (canvas.width / 2) + 220,
                 y: canvas.height / 1.12,
                 width: 190,
-                height: 50
+                height: 10
             }                                              
         ];
 
@@ -1418,17 +1629,32 @@ class MainMenu {
         this.addEventListeners();
     }
 
+    // onMouseMove(event) {
+    //     const rect = this.canvas.getBoundingClientRect();
+    //     const x = (event.clientX - rect.left) * (this.canvas.width / rect.width);
+    //     const y = (event.clientY - rect.top) * (this.canvas.height / rect.height);
+
+    //     this.hoveredButton = this.buttons.find(btn =>
+    //         x >= btn.x && x <= btn.x + btn.width &&
+    //         y >= btn.y && y <= btn.y + btn.height
+    //     );
+
+    //     this.render(); // Re-render to update hover visual
+    // }
+
     destroy() {
         this.canvas.removeEventListener("click", this.boundHandleClick);
+        // this.canvas.removeEventListener("mousemove", this.handleMouseMove);
+        this.canvas.removeEventListener("mousemove", this._onMouseMove);
       }
 
-    imageLoaded() {
-        this.imagesLoadedCount++;
-        if (this.imagesLoadedCount >= this.imagesToLoad) {
-            this.imagesLoaded = true;
-            this.render(); // Render when all images are loaded
-        }
-    }
+    // imageLoaded() {
+    //     this.imagesLoadedCount++;
+    //     if (this.imagesLoadedCount >= this.imagesToLoad) {
+    //         this.imagesLoaded = true;
+    //         this.render(); // Render when all images are loaded
+    //     }
+    // }
 
     // Helper function to wrap text within a width
     wrapText(context, text, x, y, maxWidth, lineHeight) {
@@ -1496,17 +1722,30 @@ class MainMenu {
         }
 
         // Check the main buttons.
+        // for (let btn of this.buttons) {
+        //     // Skip non-visible buttons.
+        //     if (!btn.visible) continue;
+        //     const left = btn.x - btn.width / 2;
+        //     const right = btn.x + btn.width / 2;
+        //     const top = btn.y - btn.height / 2;
+        //     const bottom = btn.y + btn.height / 2;
+        //     if (mouseX >= left && mouseX <= right && mouseY >= top && mouseY <= bottom) {
+        //         if (btn.text === "Start Game" && this.selectedMode) {
+        //             // Call the start callback passing the selected mode.
+        //             if (this.startCallback) this.startCallback(this.selectedMode);
+        //         }
+        //         return;
+        //     }
+        // }
         for (let btn of this.buttons) {
-            // Skip non-visible buttons.
             if (!btn.visible) continue;
-            const left = btn.x - btn.width / 2;
-            const right = btn.x + btn.width / 2;
-            const top = btn.y - btn.height / 2;
-            const bottom = btn.y + btn.height / 2;
-            if (mouseX >= left && mouseX <= right && mouseY >= top && mouseY <= bottom) {
+            
+            if (mouseX >= btn.x && 
+                mouseX <= btn.x + btn.width &&
+                mouseY >= btn.y && 
+                mouseY <= btn.y + btn.height) {
                 if (btn.text === "Start Game" && this.selectedMode) {
-                    // Call the start callback passing the selected mode.
-                    if (this.startCallback) this.startCallback(this.selectedMode);
+                    this.startCallback(this.selectedMode);
                 }
                 return;
             }
@@ -1515,6 +1754,15 @@ class MainMenu {
 
     render() {
         const ctx = this.context;
+
+        // button layout configs:
+        const buttonWidth = 190;
+        const buttonHeight = 50;
+        const gap = 20;
+
+        const totalWidth = this.buttons.length * buttonWidth + (this.buttons.length - 1) * gap;
+        const startX = (this.canvas.width - totalWidth) / 2;
+        const y = this.canvas.height - buttonHeight - 50; // 40px padding from bottom
 
         // Clear canvas
         ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -1583,8 +1831,6 @@ class MainMenu {
                     thumbHeight
                 );
             }
-
-
             // Title
             ctx.fillStyle = "black";
             ctx.font = "15px Montserrat";
@@ -1607,92 +1853,236 @@ class MainMenu {
             );
         }
 
-        // Draw buttons using preloaded button asset
-        const buttonImg = this.assets.get("button");
+        // ctx.strokeStyle = 'red';
+        // ctx.lineWidth = 2;
+        // for (let btn of this.buttons) {
+        //     ctx.strokeRect(btn.x, btn.y, btn.width, btn.height);
+        // }
 
-        for (let btn of this.buttons) {
-            if (!btn.visible && btn.text === "Start Game") continue;
+        for (let i = 0; i < this.buttons.length; i++) {
+            const btn = this.buttons[i];
 
-            const left = btn.x - btn.width / 2;
-            const top = btn.y - btn.height / 2;
+            btn.width = buttonWidth;
+            btn.height = buttonHeight;
+            btn.x = startX + i * (buttonWidth + gap);
+            btn.y = y;
 
-            if (buttonImg && buttonImg.complete) {
-                ctx.drawImage(buttonImg, left, top, btn.width, btn.height);
-            } else {
-                ctx.fillStyle = "#555";
-                ctx.beginPath();
-                ctx.roundRect(left, top, btn.width, btn.height, 10);
-                ctx.fill();
-            }
-
-            ctx.fillStyle = "#fff";
-            ctx.font = "24px Montserrat";
-            ctx.textAlign = "center";
-            ctx.fillText(btn.text, btn.x, btn.y + 8);
+            const isHovered = this.hoveredButton === btn;
+            drawButton(this.context, btn, isHovered, this.assets);
         }
     }
 }
 
 class ImageSelectMenu {
-    constructor(canvas, context, mode, startGameCallback) {
+    // constructor(canvas, context, mode, startGameCallback, assets) {
+    //     this.canvas = canvas;
+    //     this.context = context;
+    //     this.mode = mode;
+    //     this.startGameCallback = startGameCallback;
+    //     this.assets =assets;
+
+    //     this.boundHandleClick = this.handleClick.bind(this);
+    //     this.canvas.addEventListener("click", this.boundHandleClick);
+
+    //     this.uploadedImage = null;
+
+    //     //Load dynamically
+    //     this.folderImageCount = 3;
+    //     this.imageFolder = "IMG/pieces/";
+    //     this.images = [];
+
+    //     for (let i = 1; i <= this.folderImageCount; i++) {
+    //         this.images.push({ 
+    //             src: `${this.imageFolder}image${i}.jpg`, 
+    //             label: `Image ${i}` 
+    //         });
+    //     }
+
+    //     this.rows = 3;
+    //     this.cols = 3;
+        
+    //     this.thumbnails = [];
+    //     this.loadedCount = 0;
+
+    //     // this.thumbWidth = 300;
+    //     // this.thumbHeight = 180;
+    //     // this.thumbGap = 40;
+
+    //     this.thumbWidth = this.canvas.width * 0.22;
+    //     this.thumbHeight = this.canvas.height * 0.25;
+    //     this.thumbGap = this.canvas.width * 0.03;
+
+    //     this.scrollOffset = 0;
+    //     this.thumbnailScrollStep = 200; // pixels per scroll
+
+    //     //upload button
+    //     this.uploadButton = {
+    //       x: 0, y: 0, width: 0, height: 0,
+    //       label: "Upload Your Own"
+    //     };
+    //     this.uploadBtnX = this.canvas.width / 2 - 100;
+    //     this.uploadBtnY = this.canvas.height - 100;
+    //     this.uploadBtnW = 200;
+    //     this.uploadBtnH = 50;
+    //     enableButtonHoverTracking(this); // ✅ this uses this.buttons automatically
+
+    //     this.setupUploadUI();
+    //     this.setupGridSelectors();
+    //     this.initThumbnails();  
+    // }
+   constructor(canvas, context, mode, startGameCallback, assets) {
         this.canvas = canvas;
         this.context = context;
         this.mode = mode;
         this.startGameCallback = startGameCallback;
+        this.assets = assets;
+
+        // Initialize buttons array
+        this.buttons = [
+            {
+                x: 0, y: 0, width: 0, height: 0,
+                label: "Upload Your Own",
+                id: "upload-btn"
+            }
+        ];
 
         this.boundHandleClick = this.handleClick.bind(this);
+        this.boundHandleWheel = this.handleWheel.bind(this);
         this.canvas.addEventListener("click", this.boundHandleClick);
-
+        this.canvas.addEventListener("wheel", this.boundHandleWheel);
 
         this.uploadedImage = null;
-        // this.setupUploadUI();
 
-        // this.images = [
-        //     { src: "IMG/pieces/image1.jpg", label: "Pirates" },
-        //     { src: "IMG/pieces/image2.jpg", label: "Deer" },
-        //     { src: "IMG/pieces/image3.jpg", label: "Dry woods" }
-        // ];
-        //Load dynamically
+        // Load more images for scrolling demonstration
+        this.folderImageCount = 12; // Increased number of images
         this.imageFolder = "IMG/pieces/";
         this.images = [];
 
-        for (let i = 1; i <= 3; i++) {
+        for (let i = 1; i <= this.folderImageCount; i++) {
             this.images.push({ 
                 src: `${this.imageFolder}image${i}.jpg`, 
-                label: `Image ${i}` 
+                label: `Image ${i}`,
+                id: `image-${i}`
             });
         }
 
-        this.rows = 3;
-        this.cols = 3;
+        this.rows = 2;
+        this.cols = 2;
         
         this.thumbnails = [];
         this.loadedCount = 0;
 
+        // Thumbnail dimensions
+        this.thumbWidth = 200;
+        this.thumbHeight = 150;
+        this.thumbGap = 20;
+        
+        // Scroll properties
+        this.scrollOffset = 0;
+        this.maxScrollOffset = 0;
+        this.scrollSpeed = 25;
+        this.isDragging = false;
+        this.dragStartX = 0;
+        this.startScrollOffset = 0;
+
+        // Calculate how many thumbnails fit in view
+        this.visibleThumbCount = Math.floor((canvas.width * 0.9) / (this.thumbWidth + this.thumbGap));
+
+        // Upload button
+        this.uploadButton = this.buttons[0]; // Reference the button from the buttons array
+        this.uploadBtnX = this.canvas.width / 2 - 100;
+        this.uploadBtnY = this.canvas.height - 100;
+        this.uploadBtnW = 200;
+        this.uploadBtnH = 50;
+        
+        // Initialize hover tracking after buttons are set up
+        enableButtonHoverTracking(this);
+        
         this.setupUploadUI();
         this.setupGridSelectors();
-        // this.initThumbnails();
-        this.initThumbnails();  
+        this.initThumbnails();
+
+        // For touch support
+        this.boundHandleTouchStart = this.handleTouchStart.bind(this);
+        this.boundHandleTouchMove = this.handleTouchMove.bind(this);
+        this.boundHandleTouchEnd = this.handleTouchEnd.bind(this);
+        this.canvas.addEventListener("touchstart", this.boundHandleTouchStart);
+        this.canvas.addEventListener("touchmove", this.boundHandleTouchMove);
+        this.canvas.addEventListener("touchend", this.boundHandleTouchEnd);
     }
 
-      initThumbnails() {
+    handleWheel(event) {
+        event.preventDefault();
+        this.scrollOffset += event.deltaY > 0 ? this.scrollSpeed : -this.scrollSpeed;
+        this.clampScrollOffset();
+        this.render();
+    }
+
+    handleTouchStart(event) {
+        event.preventDefault();
+        const touch = event.touches[0];
+        this.isDragging = true;
+        this.dragStartX = touch.clientX;
+        this.startScrollOffset = this.scrollOffset;
+    }
+
+    handleTouchMove(event) {
+        if (!this.isDragging) return;
+        event.preventDefault();
+        const touch = event.touches[0];
+        const deltaX = touch.clientX - this.dragStartX;
+        this.scrollOffset = this.startScrollOffset - deltaX;
+        this.clampScrollOffset();
+        this.render();
+    }
+
+    handleTouchEnd() {
+        this.isDragging = false;
+    }
+
+    clampScrollOffset() {
+        const totalContentWidth = this.thumbnails.length * (this.thumbWidth + this.thumbGap);
+        const maxScroll = totalContentWidth - (this.canvas.width * 0.9);
+        this.scrollOffset = Math.max(0, Math.min(maxScroll, this.scrollOffset));
+    }
+
+    initThumbnails() {
         for (let imgData of this.images) {
             const img = new Image();
             img.src = imgData.src;
             img.onload = () => {
                 this.loadedCount++;
+                if (this.loadedCount === this.images.length) {
+                    // Calculate max scroll offset after all images load
+                    const totalWidth = this.thumbnails.length * (this.thumbWidth + this.thumbGap);
+                    const visibleWidth = this.canvas.width * 0.9;
+                    this.maxScrollOffset = Math.max(0, totalWidth - visibleWidth);
+                }
                 this.render();
             };
-            this.thumbnails.push({ ...imgData, image: img });
+            this.thumbnails.push({ 
+                ...imgData, 
+                image: img,
+                x: 0, // Will be set in render
+                y: 0
+            });
         }
     }
 
     destroy() {
         this.canvas.removeEventListener("click", this.boundHandleClick);
+        this.canvas.removeEventListener("wheel", this.boundHandleWheel);
+        this.canvas.removeEventListener("touchstart", this.boundHandleTouchStart);
+        this.canvas.removeEventListener("touchmove", this.boundHandleTouchMove);
+        this.canvas.removeEventListener("touchend", this.boundHandleTouchEnd);
+
+        this.canvas.removeEventListener("mousemove", this._onMouseMove);
+
         this.rowSelect?.remove();
         this.colSelect?.remove();
         this.fileInput?.remove();
-      }
+
+    }
 
     setupGridSelectors() {
         this.rowSelect = document.createElement("select");
@@ -1763,103 +2153,257 @@ class ImageSelectMenu {
         document.body.appendChild(this.fileInput);
     }
 
-    handleClick(event) {
+    // handleClick(event) {
+    //     const rect = this.canvas.getBoundingClientRect();
+    //     const x = (event.clientX - rect.left) * this.canvas.width / rect.width;
+    //     const y = (event.clientY - rect.top) * this.canvas.height / rect.height;
+
+    //     const startX = (this.canvas.width - (this.thumbWidth * this.thumbnails.length + this.thumbGap * (this.thumbnails.length - 1))) / 2;
+    //     const yPos = this.canvas.height / 2;
+
+    //     for (let i = 0; i < this.thumbnails.length; i++) {
+    //         const xPos = startX + i * (this.thumbWidth + this.thumbGap);
+    //         if (x >= xPos && x <= xPos + this.thumbWidth && y >= yPos && y <= yPos + this.thumbHeight) {
+    //             this.canvas.removeEventListener("click", this.boundHandleClick);
+
+    //             // this.startGameCallback(this.mode, this.thumbnails[i].src);
+    //             // Remove grid selectors from DOM
+    //             this.rowSelect.remove();
+    //             this.colSelect.remove();
+
+    //             // Launch game
+    //             this.startGameCallback(this.mode, this.thumbnails[i].src, this.rows, this.cols);
+
+    //             return;
+    //         }
+    //     }
+
+    //     // Check if "Upload Your Own" button was clicked
+    //     if (
+    //         x >= this.uploadBtnX && x <= this.uploadBtnX + this.uploadBtnW &&
+    //         y >= this.uploadBtnY && y <= this.uploadBtnY + this.uploadBtnH
+    //     ) {
+    //         this.fileInput.click(); // Trigger file chooser
+    //         return;
+    //     }
+    // }
+     handleClick(event) {
         const rect = this.canvas.getBoundingClientRect();
-        const x = (event.clientX - rect.left) * this.canvas.width / rect.width;
-        const y = (event.clientY - rect.top) * this.canvas.height / rect.height;
+        const scaleX = this.canvas.width / rect.width;
+        const scaleY = this.canvas.height / rect.height;
+        const x = (event.clientX - rect.left) * scaleX;
+        const y = (event.clientY - rect.top) * scaleY;
 
-        const thumbWidth = 300;
-        const thumbHeight = 180;
-        const gap = 40;
-        const startX = (this.canvas.width - (thumbWidth * this.thumbnails.length + gap * (this.thumbnails.length - 1))) / 2;
-        const yPos = this.canvas.height / 2;
+        // Check thumbnails
+        for (const thumb of this.thumbnails) {
+            if (x >= thumb.x && x <= thumb.x + this.thumbWidth &&
+                y >= thumb.y && y <= thumb.y + this.thumbHeight) {
+                
+                // this.canvas.removeEventListener("click", this.boundHandleClick);
+                // this.rowSelect?.remove();
+                // this.colSelect?.remove();
 
-        for (let i = 0; i < this.thumbnails.length; i++) {
-            const xPos = startX + i * (thumbWidth + gap);
-            if (x >= xPos && x <= xPos + thumbWidth && y >= yPos && y <= yPos + thumbHeight) {
-                this.canvas.removeEventListener("click", this.boundHandleClick);
-
-                // this.startGameCallback(this.mode, this.thumbnails[i].src);
-                // Remove grid selectors from DOM
-                this.rowSelect.remove();
-                this.colSelect.remove();
-
-                // Launch game
-                this.startGameCallback(this.mode, this.thumbnails[i].src, this.rows, this.cols);
-
+                this.destroy()
+                this.startGameCallback(this.mode, thumb.src, this.rows, this.cols);
                 return;
             }
         }
 
-        // Check if "Upload Your Own" button was clicked
-        const uploadBtnX = this.canvas.width / 2 - 100;
-        const uploadBtnY = this.canvas.height - 100;
-        const uploadBtnW = 200;
-        const uploadBtnH = 50;
-
-        if (
-            x >= uploadBtnX && x <= uploadBtnX + uploadBtnW &&
-            y >= uploadBtnY && y <= uploadBtnY + uploadBtnH
-        ) {
-            this.fileInput.click(); // Trigger file chooser
-            return;
+        // Check upload button
+        if (x >= this.uploadBtnX && x <= this.uploadBtnX + this.uploadBtnW &&
+            y >= this.uploadBtnY && y <= this.uploadBtnY + this.uploadBtnH) {
+            this.fileInput.click();
         }
     }
 
-    render() {
+    // render() {
+    //     const ctx = this.context;
+    //     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+    //     const bg = this.assets.get("background");
+    //     if (bg && bg.complete) {
+    //         ctx.drawImage(bg, 0, 0, this.canvas.width, this.canvas.height);
+    //     } else {
+    //         ctx.fillStyle = "#222";
+    //         ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+    //     }
+       
+    //     ctx.fillStyle = "#fff";
+    //     ctx.font = "48px Arial";
+    //     ctx.textAlign = "center";
+    //     ctx.fillText("Choose a Picture", this.canvas.width / 2, 100);
+
+    //     //thumbnails
+    //     const startX = (this.canvas.width - (this.thumbWidth * this.thumbnails.length + this.thumbGap * (this.thumbnails.length - 1))) / 2;
+    //     const yPos = this.canvas.height / 2;
+
+    //     for (let i = 0; i < this.thumbnails.length; i++) {
+    //         const imgObj = this.thumbnails[i];
+    //         const x = startX + i * (this.thumbWidth + this.thumbGap);
+
+    //         if (imgObj.image.complete) {
+    //             ctx.drawImage(imgObj.image, x, yPos, this.thumbWidth, this.thumbHeight);
+    //         }
+
+    //         // ctx.fillStyle = "#fff";
+    //         // ctx.font = "20px Arial";
+    //         // ctx.fillText(imgObj.label, x + thumbWidth / 2, yPos + thumbHeight + 30);
+    //     }
+
+    //     //push uploadButton to buttons for auto hover effect
+    //     this.buttons = [
+    //       this.uploadButton,
+    //       { label: "Start", action: "start" },
+    //       { label: "Back", action: "back" }
+    //     ];
+
+    //     this.uploadButton.x = this.uploadBtnX;
+    //     this.uploadButton.y = this.uploadBtnY;
+    //     this.uploadButton.width = this.uploadBtnW;
+    //     this.uploadButton.height = this.uploadBtnH;
+
+    //     const isHovered = this.hoveredButton === this.uploadButton;
+    //     drawButton(this.context, this.uploadButton, isHovered, this.assets);
+
+    //     // ctx.fillStyle = "#444";
+    //     // ctx.fillRect(this.uploadBtnX, this.uploadBtnY, this.uploadBtnW, this.uploadBtnH);
+
+    //     // ctx.fillStyle = "#fff";
+    //     // ctx.font = "20px Arial";
+    //     // ctx.textAlign = "center";
+    //     // ctx.fillText("Upload Your Own", this.canvas.width / 2, this.canvas.height - 65);
+    // }
+   render() {
         const ctx = this.context;
         ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
 
-        ctx.fillStyle = "#111";
-        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
+        // Draw background
+        const bg = this.assets.get("background");
+        if (bg && bg.complete) {
+            ctx.drawImage(bg, 0, 0, this.canvas.width, this.canvas.height);
+        } else {
+            ctx.fillStyle = "#222";
+            ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        }
+       
+        // Draw title
         ctx.fillStyle = "#fff";
         ctx.font = "48px Arial";
         ctx.textAlign = "center";
-        ctx.fillText("Choose a Picture", this.canvas.width / 2, 100);
+        ctx.fillText("Choose a Picture", this.canvas.width / 2, 80);
 
-        const thumbWidth = 300;
-        const thumbHeight = 180;
-        const gap = 40;
-        const startX = (this.canvas.width - (thumbWidth * this.thumbnails.length + gap * (this.thumbnails.length - 1))) / 2;
-        const yPos = this.canvas.height / 2;
+        // Calculate thumbnail area dimensions
+        const thumbAreaWidth = this.canvas.width * 0.9;
+        const thumbAreaX = (this.canvas.width - thumbAreaWidth) / 2;
+        const thumbAreaY = this.canvas.height / 2 - this.thumbHeight / 2;
 
+        // Create clipping region for thumbnails
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(thumbAreaX, thumbAreaY - 20, thumbAreaWidth, this.thumbHeight + 40);
+        ctx.clip();
+
+        // Draw thumbnails with scroll offset
+        let currentX = thumbAreaX - this.scrollOffset;
+        
         for (let i = 0; i < this.thumbnails.length; i++) {
-            const imgObj = this.thumbnails[i];
-            const x = startX + i * (thumbWidth + gap);
+            const thumb = this.thumbnails[i];
+            thumb.x = currentX;
+            thumb.y = thumbAreaY;
 
-            if (imgObj.image.complete) {
-                ctx.drawImage(imgObj.image, x, yPos, thumbWidth, thumbHeight);
+            // Only draw if visible
+            if (currentX + this.thumbWidth > thumbAreaX && currentX < thumbAreaX + thumbAreaWidth) {
+                if (thumb.image.complete) {
+                    // Draw thumbnail image
+                    ctx.drawImage(thumb.image, currentX, thumbAreaY, this.thumbWidth, this.thumbHeight);
+                    
+                    // Draw border
+                    ctx.strokeStyle = this.hoveredButton?.id === thumb.id ? "#fff" : "#666";
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(currentX, thumbAreaY, this.thumbWidth, this.thumbHeight);
+                } else {
+                    // Placeholder if image not loaded
+                    ctx.fillStyle = "#444";
+                    ctx.fillRect(currentX, thumbAreaY, this.thumbWidth, this.thumbHeight);
+                }
             }
+            
+            currentX += this.thumbWidth + this.thumbGap;
+        }
+        
+        ctx.restore();
 
-            // ctx.fillStyle = "#fff";
-            // ctx.font = "20px Arial";
-            // ctx.fillText(imgObj.label, x + thumbWidth / 2, yPos + thumbHeight + 30);
+        // Draw scroll indicators if needed
+        if (this.maxScrollOffset > 0) {
+            ctx.fillStyle = "rgba(255,255,255,0.7)";
+            
+            // Left arrow if can scroll left
+            if (this.scrollOffset > 0) {
+                ctx.beginPath();
+                ctx.moveTo(thumbAreaX - 30, this.canvas.height/2);
+                ctx.lineTo(thumbAreaX - 50, this.canvas.height/2 - 15);
+                ctx.lineTo(thumbAreaX - 50, this.canvas.height/2 + 15);
+                ctx.closePath();
+                ctx.fill();
+            }
+            
+            // Right arrow if can scroll right
+            if (this.scrollOffset < this.maxScrollOffset) {
+                ctx.beginPath();
+                ctx.moveTo(thumbAreaX + thumbAreaWidth + 30, this.canvas.height/2);
+                ctx.lineTo(thumbAreaX + thumbAreaWidth + 50, this.canvas.height/2 - 15);
+                ctx.lineTo(thumbAreaX + thumbAreaWidth + 50, this.canvas.height/2 + 15);
+                ctx.closePath();
+                ctx.fill();
+            }
         }
 
-        ctx.fillStyle = "#444";
-        ctx.fillRect(this.canvas.width / 2 - 100, this.canvas.height - 100, 200, 50);
+        // Draw upload button
+        this.uploadButton.x = this.uploadBtnX;
+        this.uploadButton.y = this.uploadBtnY;
+        this.uploadButton.width = this.uploadBtnW;
+        this.uploadButton.height = this.uploadBtnH;
 
-        ctx.fillStyle = "#fff";
-        ctx.font = "20px Arial";
-        ctx.textAlign = "center";
-        ctx.fillText("Upload Your Own", this.canvas.width / 2, this.canvas.height - 65);
+        const isHovered = this.hoveredButton?.id === "upload-btn";
+        drawButton(ctx, this.uploadButton, isHovered, this.assets);
     }
 }
 
 // === WINDOW LOAD ENTRY ===
 window.addEventListener("load", () => {
+
     const canvas = document.getElementById("canvas");
     const context = canvas.getContext("2d");
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
+    
+    // Set canvas size based on window height while maintaining aspect ratio
+    // const targetHeight = window.innerHeight;
+    // const targetWidth = targetHeight * (16/9); // Example 16:9 aspect ratio
+    
+    // canvas.width = Math.min(targetWidth, window.innerWidth);
+    // canvas.height = targetHeight;
+    function resizeCanvas() {
+        const targetHeight = window.innerHeight;
+        const targetWidth = targetHeight * (16 / 9); // Keep 16:9 ratio
+
+        canvas.width = Math.min(targetWidth, window.innerWidth);
+        canvas.height = targetHeight;
+
+        if (currentScreen?.render) {
+            currentScreen.render();
+        }
+    }
+
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas(); // initial call
 
     const assets = new AssetManager();
-    assets.load("background", "ui/bg.png");
-    assets.load("button", "ui/btn.png");
-    assets.load("card", "ui/btnbig.png");
-    assets.load("jigsawThumb", "ui/jigsawThumpnail.png");
-    assets.load("gridThumb", "ui/gridThumpnail.png");
+        assets.load("background", "ui/bg.png");
+        assets.load("button", "ui/btn.png");
+        assets.load("card", "ui/btnbig.png");
+        assets.load("jigsawThumb", "ui/jigsawThumpnail.png");
+        assets.load("gridThumb", "ui/gridThumpnail.png");
+        assets.load("wood", "IMG/grid/wood_1920.jpg");
+        assets.load("textile", "IMG/grid/textile_1920.jpg")
 
     assets.whenDone(() => {
         startMainMenu();
