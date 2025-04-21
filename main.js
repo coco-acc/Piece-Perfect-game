@@ -313,11 +313,24 @@ class Game {
             { label: "Exit", action: "exit" }
         ];
 
+        // NEW: pre–shuffle mode
+        this.preShuffle = true;
+    
+        this.shuffleTimeout = null;
+        this.startButton = { 
+            width: 160, 
+            height: 50,
+            x: (this.canvas.width - 160) / 2, // Center horizontally
+            y: (this.canvas.height - 80),  // Center vertically
+            label: "Start"
+        };
+        //EventListener for start button.
+        this.startButtonEvent = this.startButtonEvent.bind(this);
+        this.canvas.addEventListener("mousedown", this.startButtonEvent);
     }
 
      startTimer() {
         if (this.isTimerRunning) return;
-        
         this.startTime = Date.now() - this.elapsedTime;
         this.timerInterval = setInterval(() => {
             this.updateTimer();
@@ -437,41 +450,8 @@ class Game {
     loadImage() {
         this.image = new Image();
         this.image.src = this.imageSrc;
-        // this.image.onload = () => {
-        //     // Calculate the aspect ratio and scale the image to fit canvas height
-        //     const canvasAspect = this.canvas.width / this.canvas.height;
-        //     const imageAspect = this.image.width / this.image.height;
-            
-        //     let drawWidth, drawHeight;
-            
-        //     // Always scale based on height
-        //     drawHeight = this.canvas.height - this.topPadding - this.bottomPadding;
-        //     drawWidth = drawHeight * imageAspect;
-            
-        //     // If the scaled width is wider than canvas, adjust to fit width instead
-        //     if (drawWidth > this.canvas.width) {
-        //         drawWidth = this.canvas.width;
-        //         drawHeight = drawWidth / imageAspect;
-        //     }
-
-        //     // Center horizontally, and start below topPadding
-        //     this.drawX = (this.canvas.width - drawWidth) / 2;
-        //     this.drawY = this.topPadding;
-        //     this.drawWidth = drawWidth;
-        //     this.drawHeight = drawHeight;
-
-        //     // Choose the appropriate pieces method based on mode.
-        //     if (this.mode === 'grid') {
-        //         this.createPieces();
-        //     } else if (this.mode === 'jigsaw') {
-        //         this.createJigSawPieces();
-        //     } else {
-        //         console.error("Unknown game mode:", this.mode);
-        //     }
-
-        //     this.startTimer(); // Start timer when pieces are created
-        // };
-        // Inside Game.loadImage()
+    
+        //with in boundary
         this.image.onload = () => {
             const MAX_WIDTH = 710;
             const MAX_HEIGHT = 1150;
@@ -493,34 +473,33 @@ class Game {
             this.drawX = (this.canvas.width - drawWidth) / 2;
             this.drawY = (this.canvas.height - drawHeight) / 2;
 
-            if (this.mode === 'grid') {
-                this.createPieces();
-            } else if (this.mode === 'jigsaw') {
-                this.createJigSawPieces();
-            } else {
-                console.error("Unknown game mode:", this.mode);
-            }
-
-            this.startTimer();
+            // render perfectly–ordered pieces
+            //============================================<
+            
+            // schedule auto–start in 5 s
+            this.shuffleTimeout = setTimeout(() => this.startGame(), 6000);
+            this.render();
         };
+    }
+
+   startGame() {
+        if (!this.preShuffle) return;
+        clearTimeout(this.shuffleTimeout);
+        this.preShuffle = false;
+
+        if (this.mode === 'grid') {
+            this.createPieces();
+        } else {
+            this.createJigSawPieces();
+        }
+
+        this.destroyStartButton();
+        this.startTimer();
+        this.render();
     }
 
     createPieces() {
         // Calculate piece dimensions based on scaled image
-        // const pieceWidth = this.drawWidth / this.cols;
-        // const pieceHeight = this.drawHeight / this.rows;
-        
-        // // Generate all possible positions (initially in correct order)
-        // let shuffledPositions = [];
-        // for (let row = 0; row < this.rows; row++) {
-        //     for (let col = 0; col < this.cols; col++) {
-        //         shuffledPositions.push({ 
-        //             x: this.drawX + col * pieceWidth, 
-        //             y: this.drawY + row * pieceHeight 
-        //         });
-        //     }
-        // }
-         // Calculate piece dimensions based on scaled image
         const pieceWidth = this.drawWidth / this.cols;
         const pieceHeight = this.drawHeight / this.rows;
         
@@ -623,17 +602,6 @@ class Game {
         }
 
         // Generate the target (correct) positions for each piece.
-        // const correctPositions = [];
-        // for (let row = 0; row < this.rows; row++) {
-        //     for (let col = 0; col < this.cols; col++) {
-        //         correctPositions.push({
-        //             x: this.drawX + col * pieceWidth,
-        //             y: this.drawY + row * pieceHeight
-        //         });
-        //     }
-        // }
-        // Shuffle positions for initial placement.
-        // const shuffledPositions = correctPositions.slice().sort(() => Math.random() - 0.5);
         const correctPositions = [];
         for (let row = 0; row < this.rows; row++) {
             for (let col = 0; col < this.cols; col++) {
@@ -645,6 +613,7 @@ class Game {
         }
         
         // Shuffle until no piece is in its correct position
+        // const shuffledPositions = correctPositions.slice().sort(() => Math.random() - 0.5);
         let shuffledPositions = [];
         let validShuffle = false;
         
@@ -869,6 +838,28 @@ class Game {
         this.saveState();
     }
 
+    startButtonEvent(event) {
+        // Handle start button click during pre-shuffle
+        if (this.preShuffle) {
+            const rect = this.canvas.getBoundingClientRect();
+            const scaleX = this.canvas.width / rect.width;
+            const scaleY = this.canvas.height / rect.height;
+            
+            const offsetX = (event.clientX - rect.left) * scaleX;
+            const offsetY = (event.clientY - rect.top) * scaleY;
+            const b = this.startButton;
+
+            if (offsetX >= b.x && offsetX <= b.x + b.width &&
+                offsetY >= b.y && offsetY <= b.y + b.height) {
+                console.log('button click')
+                this.startGame();
+                return;
+            }
+
+            return; // Don't process other clicks during pre-shuffle
+        }
+    }
+
     onMouseMove(event) {
         if (!this.draggingPiece) return;
         
@@ -915,6 +906,10 @@ class Game {
             pieceA.x < pieceB.x + pieceB.width &&
             pieceA.x + pieceA.width > pieceB.x
         );
+    }
+
+    destroyStartButton(){
+        this.canvas.removeEventListener('mousedown', this.startButtonEvent);
     }
 
     destroy() {
@@ -1151,7 +1146,7 @@ class Game {
 
         const totalHeight = this.buttons.length * buttonHeight + (this.buttons.length - 1) * gap;
         const startY = (this.canvas.height - totalHeight) / 2;
-        // const x = this.drawX - buttonWidth - 120; // left of the grid
+        // const x = this.drawX - buttonWidth - 20; // left of the grid
         const x = 60; // left of the grid
 
         ctx.font = "18px Arial";
@@ -1168,6 +1163,13 @@ class Game {
             drawButton(ctx, btn, isHovered, this.assets);
         }
     }
+//     updateButtonPositions() {
+//     // Update start button position
+//     this.startButton.x = (this.canvas.width - this.startButton.width) / 2;
+//     this.startButton.y = (this.canvas.height - this.startButton.height) / 2;
+    
+//     // Update other buttons if needed
+// }
 
     render() {
         // if (!this.needsRender) return;
@@ -1206,11 +1208,50 @@ class Game {
         }
         
         // Draw the puzzle pieces on top.
-        this.pieces.forEach(piece => piece.draw(this.context));
+        this.pieces.forEach(piece => piece.draw(this.context));    
+        
+        
+
+//         if (this.preShuffle) {
+//   this.context.fillStyle = "rgba(0,0,0,0.6)";
+//   this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+//   const bw = this.startButton.width;
+//   const bh = this.startButton.height;
+//   const bx = (this.canvas.width - bw) / 2;
+//   const by = (this.canvas.height - bh) / 2;
+
+//   this.startButton.x = bx;
+//   this.startButton.y = by;
+
+//   const buttonImg = this.assets.get("button");
+//   if (buttonImg && buttonImg.complete) {
+//     this.context.drawImage(buttonImg, bx, by, bw, bh);
+//   } else {
+//     // fallback
+//     this.context.fillStyle = "#444";
+//     this.context.fillRect(bx, by, bw, bh);
+//     this.context.strokeStyle = "#fff";
+//     this.context.strokeRect(bx, by, bw, bh);
+//   }
+
+//   // Draw "Start" text over the image
+//   this.context.fillStyle = "#fff";
+//   this.context.font = "24px Arial";
+//   this.context.textAlign = "center";
+//   this.context.fillText("Start", this.canvas.width / 2, by + bh / 2 + 8);
+
+//   return;
+// }
+        if (this.preShuffle) {
+            // Draw start button using the existing drawButton function
+            this.context.drawImage(this.image, this.drawX, this.drawY, this.drawWidth, this.drawHeight);
+            drawButton(this.context, this.startButton, false, this.assets);
+
+            return;
+        }
         
         // Draw the timer overlay.
-        // this.context.fillStyle = 'rgba(0, 0, 0, 0.5)';
-        // this.context.fillRect(10, 10, 120, 40);
         this.context.fillStyle = 'white';
         this.context.font = '24px Arial';
         this.context.textAlign = 'left';
@@ -1249,18 +1290,17 @@ class VictoryScreen {
         this.bestTime = bestTime;
 
         // Initialize buttons
-        this.buttons = [];
-        this.playButton = null;
+        // this.playButton = null;
         this.backButton = null;
         this.hoveredButton = null;
 
         // Bind event handlers
         this.boundClick = this.handleClick.bind(this);
-        this.boundMouseMove = this.handleMouseMove.bind(this);
+        // this.boundMouseMove = this.handleMouseMove.bind(this);
         
         // Add event listeners
         this.canvas.addEventListener('click', this.boundClick);
-        this.canvas.addEventListener('mousemove', this.boundMouseMove);
+        // this.canvas.addEventListener('mousemove', this.boundMouseMove);
 
         this.confetti = [];
         this.animate = this.animate.bind(this);
@@ -1271,34 +1311,29 @@ class VictoryScreen {
         this.render();
     }
 
-   handleMouseMove(event) {
-        const rect = this.canvas.getBoundingClientRect();
-        const x = (event.clientX - rect.left) * (this.canvas.width / rect.width);
-        const y = (event.clientY - rect.top) * (this.canvas.height / rect.height);
+   // handleMouseMove(event) {
+   //      const rect = this.canvas.getBoundingClientRect();
+   //      const x = (event.clientX - rect.left) * (this.canvas.width / rect.width);
+   //      const y = (event.clientY - rect.top) * (this.canvas.height / rect.height);
 
-        const prevHovered = this.hoveredButton;
-        let newHovered = null;
+   //      const prevHovered = this.hoveredButton;
+   //      let newHovered = null;
 
-        if (this.playButton &&
-            x >= this.playButton.x && x <= this.playButton.x + this.playButton.width &&
-            y >= this.playButton.y && y <= this.playButton.y + this.playButton.height) {
-            newHovered = this.playButton;
-        } else if (this.backButton &&
-            x >= this.backButton.x && x <= this.backButton.x + this.backButton.width &&
-            y >= this.backButton.y && y <= this.backButton.y + this.backButton.height) {
-            newHovered = this.backButton;
-        }
-
-        // if (newHovered !== prevHovered) {
-        //     this.hoveredButton = newHovered;
-        //     this.render(); // Re-render only if hover state changed
-        // }
-    }
+   //      if (this.playButton &&
+   //          x >= this.playButton.x && x <= this.playButton.x + this.playButton.width &&
+   //          y >= this.playButton.y && y <= this.playButton.y + this.playButton.height) {
+   //          newHovered = this.playButton;
+   //      } else if (this.backButton &&
+   //          x >= this.backButton.x && x <= this.backButton.x + this.backButton.width &&
+   //          y >= this.backButton.y && y <= this.backButton.y + this.backButton.height) {
+   //          newHovered = this.backButton;
+   //      }
+   //  }
 
     createConfetti() {
         const colors = ["#ff0", "#f0f", "#0ff", "#0f0", "#f00", "#00f"];
 
-        for (let i = 0; i < 150; i++) {
+        for (let i = 0; i < 300; i++) {
             const x = Math.random() * this.canvas.width;
             const y = Math.random() * this.canvas.height / 2;
             const color = colors[Math.floor(Math.random() * colors.length)];
@@ -1356,7 +1391,7 @@ class VictoryScreen {
      destroy() {
         // Remove event listeners
         this.canvas.removeEventListener('click', this.boundClick);
-        this.canvas.removeEventListener('mousemove', this.boundMouseMove);
+        // this.canvas.removeEventListener('mousemove', this.boundMouseMove);
         this.confetti = [];
     }
 
@@ -1419,50 +1454,32 @@ class VictoryScreen {
         // Show time
         ctx.fillStyle = "#fff";
         ctx.font = "24px Arial";
-        ctx.fillText(`Time: ${this.timeElapsed}s`, this.canvas.width / 2, y + 100);
+        ctx.fillText(`Time: ${this.timeElapsed}`, this.canvas.width / 2, y + 100);
 
         if (this.bestTime) {
             ctx.fillStyle = "#00ffcc";
             ctx.font = "22px Arial";
             ctx.fillText("🎉 New Best Time!🎉", this.canvas.width / 2, y + 140);
-        }
+        } 
+        
+        //draw buttons
+        this.playButton = {
+            width: 160,
+            height: 50,
+            x: (this.canvas.width - 160) / 2,
+            y: y + 190,
+            label: "Play Again" 
+        };
+        drawButton(this.context, this.playButton, false, this.assets);
 
-        // Play again button
-        const buttonWidth = 200;
-        const buttonHeight = 60;
-        const buttonX = (this.canvas.width - buttonWidth) / 2;
-        const buttonY = y + 160;
-
-        // Draw button with hover effect
-        ctx.fillStyle = this.hoveredButton === this.playButton ? "#555" : "#444";
-        ctx.fillRect(buttonX, buttonY, buttonWidth, buttonHeight);
-        ctx.strokeStyle = "#fff";
-        ctx.strokeRect(buttonX, buttonY, buttonWidth, buttonHeight);
-
-        ctx.fillStyle = "#fff";
-        ctx.font = "26px Arial";
-        ctx.fillText("Play Again", this.canvas.width / 2, buttonY + 40);
-
-        this.playButton = { x: buttonX, y: buttonY, width: buttonWidth, height: buttonHeight };
-
-        // Back to Menu button
-        const backWidth = 200;
-        const backHeight = 60;
-        const backX = (this.canvas.width - backWidth) / 2;
-        const backY = buttonY + 80;
-
-        // Draw button with hover effect
-        ctx.fillStyle = this.hoveredButton === this.backButton ? "#555" : "#444";
-        ctx.fillRect(backX, backY, backWidth, backHeight);
-        ctx.strokeStyle = "#fff";
-        ctx.strokeRect(backX, backY, backWidth, backHeight);
-
-        ctx.fillStyle = "#fff";
-        ctx.font = "24px Arial";
-        ctx.fillText("Back to Menu", this.canvas.width / 2, backY + 40);
-
-        // Save for click detection
-        this.backButton = { x: backX, y: backY, width: backWidth, height: backHeight };
+        this.backButton = {
+            width: 160, 
+            height: 50,
+            x: (this.canvas.width - 160) / 2, 
+            y: this.playButton.y + 80,
+            label: "Back to menu" 
+        };
+        drawButton(this.context, this.backButton, false, this.assets);
 
         // Draw confetti
         for (let p of this.confetti) {
