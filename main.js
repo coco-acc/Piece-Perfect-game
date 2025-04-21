@@ -315,6 +315,7 @@ class Game {
 
         // NEW: pre–shuffle mode
         this.preShuffle = true;
+        this.countdownTime = 5; // in seconds
     
         this.shuffleTimeout = null;
         this.startButton = { 
@@ -477,8 +478,17 @@ class Game {
             //============================================<
             
             // schedule auto–start in 5 s
-            this.shuffleTimeout = setTimeout(() => this.startGame(), 6000);
+            this.shuffleTimeout = setTimeout(() => this.startGame(), 5000);
             this.render();
+
+            this.countdownInterval = setInterval(() => {
+              this.countdownTime--;
+              if (this.countdownTime <= 0) {
+                clearInterval(this.countdownInterval);
+                this.startGame();
+              }
+              this.render(); // update countdown display each second
+            }, 1000);
         };
     }
 
@@ -486,6 +496,7 @@ class Game {
         if (!this.preShuffle) return;
         clearTimeout(this.shuffleTimeout);
         this.preShuffle = false;
+        clearInterval(this.countdownInterval);
 
         if (this.mode === 'grid') {
             this.createPieces();
@@ -1210,44 +1221,25 @@ class Game {
         // Draw the puzzle pieces on top.
         this.pieces.forEach(piece => piece.draw(this.context));    
         
-        
 
-//         if (this.preShuffle) {
-//   this.context.fillStyle = "rgba(0,0,0,0.6)";
-//   this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-//   const bw = this.startButton.width;
-//   const bh = this.startButton.height;
-//   const bx = (this.canvas.width - bw) / 2;
-//   const by = (this.canvas.height - bh) / 2;
-
-//   this.startButton.x = bx;
-//   this.startButton.y = by;
-
-//   const buttonImg = this.assets.get("button");
-//   if (buttonImg && buttonImg.complete) {
-//     this.context.drawImage(buttonImg, bx, by, bw, bh);
-//   } else {
-//     // fallback
-//     this.context.fillStyle = "#444";
-//     this.context.fillRect(bx, by, bw, bh);
-//     this.context.strokeStyle = "#fff";
-//     this.context.strokeRect(bx, by, bw, bh);
-//   }
-
-//   // Draw "Start" text over the image
-//   this.context.fillStyle = "#fff";
-//   this.context.font = "24px Arial";
-//   this.context.textAlign = "center";
-//   this.context.fillText("Start", this.canvas.width / 2, by + bh / 2 + 8);
-
-//   return;
-// }
+        //pre shuffle==================================================>
         if (this.preShuffle) {
             // Draw start button using the existing drawButton function
             this.context.drawImage(this.image, this.drawX, this.drawY, this.drawWidth, this.drawHeight);
             drawButton(this.context, this.startButton, false, this.assets);
 
+            // Countdown over the grid
+            this.context.fillStyle = "rgba(216, 221, 230, 0.7)";
+            this.context.font = '100px Arial';
+            this.context.textAlign = "center";
+            this.context.textBaseline = "middle";
+
+            let countdownText = this.countdownTime > 0 ? this.countdownTime.toString() : "Go!";
+            this.context.fillText(
+              countdownText,
+              this.drawX + this.drawWidth / 2,
+              this.drawY + this.drawHeight / 2
+            );
             return;
         }
         
@@ -1289,6 +1281,12 @@ class VictoryScreen {
         this.backgroundSnapshot = backgroundSnapshot; // ✅ frozen game view
         this.bestTime = bestTime;
 
+        this.showDelay = true;
+        this.revealTimer = setTimeout(() => {
+            this.showDelay = false;
+            this.render();
+        }, 3000);
+
         // Initialize buttons
         // this.playButton = null;
         this.backButton = null;
@@ -1305,6 +1303,15 @@ class VictoryScreen {
         this.confetti = [];
         this.animate = this.animate.bind(this);
         this.createConfetti();
+
+        //small confetti explosions 
+        this.smallExplosions = 4; // Number of additional bursts
+        this.explosionInterval = 1200; // ms between each burst
+        let delay = 1500; // First burst happens after a short delay
+        for (let i = 0; i < this.smallExplosions; i++) {
+            setTimeout(() => this.spawnSmallConfetti(), delay + i * this.explosionInterval);
+        }
+
         requestAnimationFrame(this.animate);
         // console.log(this.bestTime);
 
@@ -1338,6 +1345,19 @@ class VictoryScreen {
             const y = Math.random() * this.canvas.height / 2;
             const color = colors[Math.floor(Math.random() * colors.length)];
             this.confetti.push(new ConfettiParticle(x, y, color));
+        }
+    }
+
+    spawnSmallConfetti() {
+        const colors = ["#ff0", "#f0f", "#0ff", "#0f0", "#f00", "#00f"];
+
+        for (let i = 0; i < 30; i++) {
+            const x = Math.random() * this.canvas.width;
+            const y = Math.random() * this.canvas.height / 2;
+            const color = colors[Math.floor(Math.random() * colors.length)];
+            const p = new ConfettiParticle(x, y, color);
+            p.size *= 0.6; // Smaller pieces
+            this.confetti.push(p);
         }
     }
 
@@ -1421,69 +1441,77 @@ class VictoryScreen {
             ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         }
 
-        ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
-        ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-        ctx.fillStyle = "#fff";
-        ctx.font = "48px Arial";
-        ctx.textAlign = "center";
-        ctx.fillText("🎉 You Did It!", this.canvas.width / 2, 100);
-
-        const rating = this.getStarRating();
-
-        // Draw stars
-        const starSize = 60;
-        const totalWidth = rating * starSize + (rating - 1) * 10;
-        const startX = (this.canvas.width - totalWidth) / 2;
-        const y = 160;
-
-        for (let i = 0; i < rating; i++) {
-            ctx.fillStyle = "gold";
-            ctx.beginPath();
-            ctx.moveTo(startX + i * (starSize + 10) + starSize / 2, y);
-            for (let j = 0; j < 5; j++) {
-                const angle = (Math.PI / 5) * (2 * j + 1);
-                const x = Math.cos(angle) * (starSize / 2);
-                const yy = Math.sin(angle) * (starSize / 2);
-                ctx.lineTo(startX + i * (starSize + 10) + starSize / 2 + x, y + yy);
-            }
-            ctx.closePath();
-            ctx.fill();
-        }
-
-        // Show time
-        ctx.fillStyle = "#fff";
-        ctx.font = "24px Arial";
-        ctx.fillText(`Time: ${this.timeElapsed}`, this.canvas.width / 2, y + 100);
-
-        if (this.bestTime) {
-            ctx.fillStyle = "#00ffcc";
-            ctx.font = "22px Arial";
-            ctx.fillText("🎉 New Best Time!🎉", this.canvas.width / 2, y + 140);
-        } 
-        
-        //draw buttons
-        this.playButton = {
-            width: 160,
-            height: 50,
-            x: (this.canvas.width - 160) / 2,
-            y: y + 190,
-            label: "Play Again" 
-        };
-        drawButton(this.context, this.playButton, false, this.assets);
-
-        this.backButton = {
-            width: 160, 
-            height: 50,
-            x: (this.canvas.width - 160) / 2, 
-            y: this.playButton.y + 80,
-            label: "Back to menu" 
-        };
-        drawButton(this.context, this.backButton, false, this.assets);
-
         // Draw confetti
         for (let p of this.confetti) {
             p.draw(ctx);
+        }
+
+        //draw other ui elements after delay.
+        if (!this.showDelay) {
+            ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+            ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+            ctx.fillStyle = "#fff";
+            ctx.font = "48px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText("🎉 You Did It!", this.canvas.width / 2, 100);
+
+            const rating = this.getStarRating();
+
+            // Draw stars
+            const starSize = 60;
+            const totalWidth = rating * starSize + (rating - 1) * 10;
+            const startX = (this.canvas.width - totalWidth) / 2;
+            const y = 160;
+
+            for (let i = 0; i < rating; i++) {
+                ctx.fillStyle = "gold";
+                ctx.beginPath();
+                ctx.moveTo(startX + i * (starSize + 10) + starSize / 2, y);
+                for (let j = 0; j < 5; j++) {
+                    const angle = (Math.PI / 5) * (2 * j + 1);
+                    const x = Math.cos(angle) * (starSize / 2);
+                    const yy = Math.sin(angle) * (starSize / 2);
+                    ctx.lineTo(startX + i * (starSize + 10) + starSize / 2 + x, y + yy);
+                }
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            // Show time
+            ctx.fillStyle = "#fff";
+            ctx.font = "24px Arial";
+            ctx.fillText(`Time: ${this.timeElapsed}`, this.canvas.width / 2, y + 100);
+
+            if (this.bestTime) {
+                ctx.fillStyle = "#00ffcc";
+                ctx.font = "22px Arial";
+                ctx.fillText("🎉 New Best Time!🎉", this.canvas.width / 2, y + 140);
+            } 
+            
+            //draw buttons
+            this.playButton = {
+                width: 160,
+                height: 50,
+                x: (this.canvas.width - 160) / 2,
+                y: y + 190,
+                label: "Next" 
+            };
+            drawButton(this.context, this.playButton, false, this.assets);
+
+            this.backButton = {
+                width: 160, 
+                height: 50,
+                x: (this.canvas.width - 160) / 2, 
+                y: this.playButton.y + 80,
+                label: "Back to menu" 
+            };
+            drawButton(this.context, this.backButton, false, this.assets);
+
+            // // Draw confetti
+            // for (let p of this.confetti) {
+            //     p.draw(ctx);
+            // }
         }
     }
 }
@@ -1935,6 +1963,17 @@ class ImageSelectMenu {
         this.uploadBtnY = this.canvas.height - 100;
         this.uploadBtnW = 200;
         this.uploadBtnH = 50;
+
+        //back button
+        this.backButton = {
+            x: 80,
+            y: this.canvas.height - 100,
+            width: 50,
+            height: 50,
+            label: "<",
+            id: "back",
+            imageName: "btnsmall"
+        };
         
         // Initialize hover tracking after buttons are set up
         enableButtonHoverTracking(this);
@@ -2101,6 +2140,36 @@ class ImageSelectMenu {
         const x = (event.clientX - rect.left) * scaleX;
         const y = (event.clientY - rect.top) * scaleY;
 
+        // Handle back button
+        if (x >= this.backButton.x && x <= this.backButton.x + this.backButton.width &&
+            y >= this.backButton.y && y <= this.backButton.y + this.backButton.height) {
+            this.destroy();
+            currentScreen = new MainMenu(this.canvas, this.context, (selectedMode) => {
+                currentScreen.destroy?.();
+                currentScreen = new ImageSelectMenu(this.canvas, this.context, selectedMode, this.startGameCallback, this.assets);
+            }, this.assets);
+            currentScreen.render();
+            return;
+        }
+
+        // Scroll left
+        if (x >= 20 && x <= 50 &&
+            y >= this.canvas.height / 2 - 30 && y <= this.canvas.height / 2 + 30) {
+            this.scrollOffset -= this.scrollSpeed * 4;
+            this.clampScrollOffset();
+            this.render();
+            return; // ⬅️ Prevents falling through to image click
+        }
+
+        // Scroll right
+        if (x >= this.canvas.width - 50 && x <= this.canvas.width - 20 &&
+            y >= this.canvas.height / 2 - 30 && y <= this.canvas.height / 2 + 30) {
+            this.scrollOffset += this.scrollSpeed * 4;
+            this.clampScrollOffset();
+            this.render();
+            return; // ⬅️ Same here
+        }
+
         // Check thumbnails
         for (const thumb of this.thumbnails) {
             if (x >= thumb.x && x <= thumb.x + this.thumbWidth &&
@@ -2185,20 +2254,20 @@ class ImageSelectMenu {
             
             // Left arrow if can scroll left
             if (this.scrollOffset > 0) {
-                ctx.beginPath();
-                ctx.moveTo(thumbAreaX - 30, this.canvas.height/2);
-                ctx.lineTo(thumbAreaX - 50, this.canvas.height/2 - 15);
-                ctx.lineTo(thumbAreaX - 50, this.canvas.height/2 + 15);
+                ctx.beginPath(); // Left arrow
+                ctx.moveTo(20, this.canvas.height / 2 - 30);
+                ctx.lineTo(50, this.canvas.height / 2);
+                ctx.lineTo(20, this.canvas.height / 2 + 30);
                 ctx.closePath();
                 ctx.fill();
             }
             
             // Right arrow if can scroll right
             if (this.scrollOffset < this.maxScrollOffset) {
-                ctx.beginPath();
-                ctx.moveTo(thumbAreaX + thumbAreaWidth + 30, this.canvas.height/2);
-                ctx.lineTo(thumbAreaX + thumbAreaWidth + 50, this.canvas.height/2 - 15);
-                ctx.lineTo(thumbAreaX + thumbAreaWidth + 50, this.canvas.height/2 + 15);
+               ctx.beginPath(); // Right arrow
+                ctx.moveTo(this.canvas.width - 20, this.canvas.height / 2 - 30);
+                ctx.lineTo(this.canvas.width - 50, this.canvas.height / 2);
+                ctx.lineTo(this.canvas.width - 20, this.canvas.height / 2 + 30);
                 ctx.closePath();
                 ctx.fill();
             }
@@ -2210,8 +2279,9 @@ class ImageSelectMenu {
         this.uploadButton.width = this.uploadBtnW;
         this.uploadButton.height = this.uploadBtnH;
 
-        const isHovered = this.hoveredButton?.id === "upload-btn";
+        let isHovered = this.hoveredButton?.id === "upload-btn";
         drawButton(ctx, this.uploadButton, isHovered, this.assets);
+        drawButton(ctx, this.backButton, false, this.assets);
     }
 }
 
@@ -2248,6 +2318,7 @@ window.addEventListener("load", () => {
     const assets = new AssetManager();
         assets.load("background", "ui/bg.png");
         assets.load("button", "ui/btn.png");
+        assets.load("btnsmall", "ui/btnsmall.png");
         assets.load("card", "ui/btnbig.png");
         assets.load("jigsawThumb", "ui/jigsawThumpnail.png");
         assets.load("gridThumb", "ui/gridThumpnail.png");
