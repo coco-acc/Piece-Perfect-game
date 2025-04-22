@@ -1448,7 +1448,7 @@ class VictoryScreen {
 
         //draw other ui elements after delay.
         if (!this.showDelay) {
-            ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+            ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
             ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
             ctx.fillStyle = "#fff";
@@ -1512,6 +1512,12 @@ class VictoryScreen {
             // for (let p of this.confetti) {
             //     p.draw(ctx);
             // }
+        } else {
+            ctx.save();
+            ctx.fillStyle = "fff";
+            ctx.font = "34px Arial";
+            ctx.fillText("congragulations", this.canvas.width / 2, this.canvas.height / 2);
+            ctx.restore();
         }
     }
 }
