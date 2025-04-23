@@ -264,7 +264,7 @@ class PuzzlePiece {
 }
 
 class Game {
-    constructor(canvas, context, imageSrc, rows, cols, mode, assets, ImagePath) {
+    constructor(canvas, context, imageSrc, rows, cols, mode, assets, ImagePath, selectedGameFlow) {
         this.assets = assets;
         this.canvas = canvas;
         this.canvas.width = this.canvas.width;
@@ -274,6 +274,8 @@ class Game {
         this.rows = rows;
         this.cols = cols;
         this.imagePath = ImagePath;
+        this.selectedGameFlow = selectedGameFlow;
+        console.log(this.selectedGameFlow);
 
         this.hoveredButton = null;
 
@@ -296,7 +298,7 @@ class Game {
 
         this.timerInterval = null;
         this.isTimerRunning = false;
-        this.userPaused = false; // 👈 NEW: true if player clicked "Pause"
+        this.userPaused = false; // 👈  true if player clicked "Pause"
         this.isGameOver = false;
 
         this.gridImg = assets.get("wood")
@@ -313,7 +315,7 @@ class Game {
             { label: "Exit", action: "exit" }
         ];
 
-        // NEW: pre–shuffle mode
+        // ===================> pre–shuffle mode<===============================
         this.preShuffle = true;
         this.countdownTime = 5; // in seconds
     
@@ -967,7 +969,8 @@ class Game {
                         this.cols,
                         this.mode,
                         this.assets,
-                        this.imagePath // include this if you're tracking available images
+                        this.imagePath, // include this if you're tracking available images
+                        this.selectedGameFlow
                     );
                     currentScreen.render();
                 }
@@ -977,17 +980,17 @@ class Game {
                     if (confirm("Exit to menu?")) {
                         this.destroy();
                         // Use the assets that were passed to the Game constructor
-                        currentScreen = new MainMenu(this.canvas, this.context, (selectedMode) => {
+                        currentScreen = new MainMenu(this.canvas, this.context, (selectedMode, selectedGameFlow) => {
                             currentScreen.destroy();
                             currentScreen = new ImageSelectMenu(this.canvas, this.context, 
                                 selectedMode, 
                                 (mode, imagePath, rows, cols) => {
                                     currentScreen.destroy();
                                     currentScreen = new Game(this.canvas, this.context, imagePath, rows, cols, 
-                                        mode, this.assets // Pass along the assets
+                                        mode, this.assets, imagePath, this.selectedGameFlow// Pass along the assets
                                     );
                                 }, 
-                                this.assets // Pass assets to ImageSelectMenu
+                                this.assets , this.selectedGameFlow// Pass assets to ImageSelectMenu
                             );
                             currentScreen.render();
                         }, this.assets); // Pass assets to MainMenu
@@ -1134,7 +1137,8 @@ class Game {
                 this.cols,
                 this.mode,
                 this.assets,
-                this.imagePath
+                this.imagePath,
+                this.selectedGameFlow
             );
         },
         this.assets,
@@ -1387,7 +1391,7 @@ class VictoryScreen {
             : this.imagePath[0];
            
             currentScreen = new Game(this.canvas, this.context, newImage, this.rows, 
-                this.cols, this.mode, this.assets, this.imagePath);
+                this.cols, this.mode, this.assets, this.imagePath, selectedGameFlow);
             return;
         }
 
@@ -1396,12 +1400,12 @@ class VictoryScreen {
             y >= this.backButton.y && y <= this.backButton.y + this.backButton.height) {
             this.destroy();
             // Transition back to Main Menu
-            currentScreen = new MainMenu(this.canvas, this.context, (selectedMode) => {
+            currentScreen = new MainMenu(this.canvas, this.context, (selectedMode, selectedGameFlow) => {
                 currentScreen.destroy?.();
                 currentScreen = new ImageSelectMenu(this.canvas, this.context, selectedMode, (mode, imagePath, rows, cols) => {
                     currentScreen.destroy?.();
-                    currentScreen = new Game(this.canvas, this.context, imagePath, rows, cols, mode, this.assets);
-                }, this.assets);
+                    currentScreen = new Game(this.canvas, this.context, newImage,  rows, cols, mode, this.assets, imagePath,this.selectedGameFlow);
+                }, this.assets, this.selectedGameFlow);
                 currentScreen.render();
             }, this.assets);
             currentScreen.render();
@@ -1612,7 +1616,6 @@ class MainMenu {
         // this.canvas.width = this.canvas.width * this.ratio;
         // this.canvas.height = this.canvas.height * this.ratio;
 
-
         //button hover effect
         enableButtonHoverTracking(this);
 
@@ -1663,7 +1666,7 @@ class MainMenu {
             }
         ];
 
-        this.selectedGameFlow = "normal";
+        this.selectedGameFlow = "countdown";
 
         // Game mode selection cards
         this.gameModes = [
@@ -1690,34 +1693,14 @@ class MainMenu {
         ];
 
         this.addEventListeners();
+
     }
-
-    // onMouseMove(event) {
-    //     const rect = this.canvas.getBoundingClientRect();
-    //     const x = (event.clientX - rect.left) * (this.canvas.width / rect.width);
-    //     const y = (event.clientY - rect.top) * (this.canvas.height / rect.height);
-
-    //     this.hoveredButton = this.buttons.find(btn =>
-    //         x >= btn.x && x <= btn.x + btn.width &&
-    //         y >= btn.y && y <= btn.y + btn.height
-    //     );
-
-    //     this.render(); // Re-render to update hover visual
-    // }
 
     destroy() {
         this.canvas.removeEventListener("click", this.boundHandleClick);
         // this.canvas.removeEventListener("mousemove", this.handleMouseMove);
         this.canvas.removeEventListener("mousemove", this._onMouseMove);
       }
-
-    // imageLoaded() {
-    //     this.imagesLoadedCount++;
-    //     if (this.imagesLoadedCount >= this.imagesToLoad) {
-    //         this.imagesLoaded = true;
-    //         this.render(); // Render when all images are loaded
-    //     }
-    // }
 
     // Helper function to wrap text within a width
     wrapText(context, text, x, y, maxWidth, lineHeight) {
@@ -1958,12 +1941,13 @@ class MainMenu {
 }
 
 class ImageSelectMenu {
-   constructor(canvas, context, mode, startGameCallback, assets) {
+   constructor(canvas, context, mode, startGameCallback, assets, selectedGameFlow) {
         this.canvas = canvas;
         this.context = context;
         this.mode = mode;
         this.startGameCallback = startGameCallback;
         this.assets = assets;
+        this.selectedGameFlow = selectedGameFlow;
 
         // Initialize buttons array
         this.buttons = [
@@ -2203,10 +2187,10 @@ class ImageSelectMenu {
         if (x >= this.backButton.x && x <= this.backButton.x + this.backButton.width &&
             y >= this.backButton.y && y <= this.backButton.y + this.backButton.height) {
             this.destroy();
-            currentScreen = new MainMenu(this.canvas, this.context, (selectedMode) => {
+            currentScreen = new MainMenu(this.canvas, this.context, (selectedMode, selectedGameFlow) => {
                 currentScreen.destroy?.();
-                currentScreen = new ImageSelectMenu(this.canvas, this.context, selectedMode, this.startGameCallback, this.assets);
-            }, this.assets);
+                currentScreen = new ImageSelectMenu(this.canvas, this.context, selectedMode, this.startGameCallback, this.assets, selectedGameFlow);
+            }, this.assets, this.selectedGameFlow);
             currentScreen.render();
             return;
         }
@@ -2233,9 +2217,10 @@ class ImageSelectMenu {
         for (const thumb of this.thumbnails) {
             if (x >= thumb.x && x <= thumb.x + this.thumbWidth &&
                 y >= thumb.y && y <= thumb.y + this.thumbHeight) {
-
+                const gameFlow = this.selectedGameFlow;
                 this.destroy()
-                this.startGameCallback(this.mode, thumb.src, this.rows, this.cols);
+                this.startGameCallback(this.mode, thumb.src, this.rows, this.cols, this.selectedGameFlow);
+                 console.log("ImageSelectMenu selectedGameFlow:", this.selectedGameFlow);
                 return;
             }
         }
@@ -2388,27 +2373,28 @@ window.addEventListener("load", () => {
         startMainMenu();
     });
 
-    currentScreen = new MainMenu(this.canvas, this.context, (selectedMode) => {
+    currentScreen = new MainMenu(this.canvas, this.context, (selectedMode, selectedGameFlow) => {
         currentScreen.destroy();
-        currentScreen = new ImageSelectMenu(this.canvas, this.context, selectedMode, (mode, imagePath, rows, cols) => {
+        currentScreen = new ImageSelectMenu(this.canvas, this.context, selectedMode, (mode, imagePath, rows, cols, selectedGameFlow) => {
             currentScreen.destroy();
-            currentScreen = new Game(this.canvas, this.context, imagePath, rows, cols, mode, this.assets);
-        }, assets);
+            currentScreen = new Game(this.canvas, this.context, newImage,  rows, cols, mode, this.assets,imagePath, 
+                selectedGameFlow);
+        }, assets, selectedGameFlow);
         currentScreen.render();
     }, assets, resizeMgr);
 
     function startMainMenu() {
         if (currentScreen && currentScreen.destroy) currentScreen.destroy();
 
-        const mainMenu = new MainMenu(canvas, context, (selectedMode) => {
+        const mainMenu = new MainMenu(canvas, context, (selectedMode, selectedGameFlow) => {
             if (currentScreen && currentScreen.destroy) currentScreen.destroy();
 
-            const imageMenu = new ImageSelectMenu(canvas, context, selectedMode, (mode, imagePath, rows, cols) => {
+            const imageMenu = new ImageSelectMenu(canvas, context, selectedMode, (mode, imagePath, rows, cols, selectedGameFlow) => {
                 if (currentScreen && currentScreen.destroy) currentScreen.destroy();
 
-                const game = new Game(canvas, context, imagePath, rows, cols, mode, assets);
+                const game = new Game(canvas, context, imagePath, rows, cols, mode, assets,imagePath, selectedGameFlow);
                 currentScreen = game; // optional for future game teardown
-            }, assets);
+            }, assets, selectedGameFlow);
 
             currentScreen = imageMenu;
             imageMenu.render();
