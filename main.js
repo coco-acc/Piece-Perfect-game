@@ -1448,7 +1448,7 @@ class VictoryScreen {
 
         //draw other ui elements after delay.
         if (!this.showDelay) {
-            ctx.fillStyle = "rgba(0, 0, 0, 0.6)";
+            ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
             ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
             ctx.fillStyle = "#fff";
@@ -1512,6 +1512,12 @@ class VictoryScreen {
             // for (let p of this.confetti) {
             //     p.draw(ctx);
             // }
+        } else {
+            ctx.save();
+            ctx.fillStyle = "fff";
+            ctx.font = "34px Arial";
+            ctx.fillText("congragulations", this.canvas.width / 2, this.canvas.height / 2);
+            ctx.restore();
         }
     }
 }
@@ -1636,6 +1642,29 @@ class MainMenu {
             }                                              
         ];
 
+        this.modeButtons = [
+            {
+                label: "Normal",
+                x: 80,
+                y: 220,
+                width: 140,
+                height: 50,
+                selected: true,
+                type: "normal"
+            },
+            {
+                label: "Countdown",
+                x: 80,
+                y: 290,
+                width: 140,
+                height: 50,
+                selected: false,
+                type: "countdown"
+            }
+        ];
+
+        this.selectedGameFlow = "normal";
+
         // Game mode selection cards
         this.gameModes = [
             {                             
@@ -1755,6 +1784,17 @@ class MainMenu {
             }
         }
 
+        for (let btn of this.modeButtons) {
+            if (mouseX >= btn.x && mouseX <= btn.x + btn.width &&
+                mouseY >= btn.y && mouseY <= btn.y + btn.height) {
+                this.modeButtons.forEach(b => b.selected = false);
+                btn.selected = true;
+                this.selectedGameFlow = btn.type;
+                this.render();
+                return;
+            }
+        }
+
         // Check the main buttons.
         for (let btn of this.buttons) {
             if (!btn.visible) continue;
@@ -1764,7 +1804,9 @@ class MainMenu {
                 mouseY >= btn.y && 
                 mouseY <= btn.y + btn.height) {
                 if (btn.text === "Start Game" && this.selectedMode) {
-                    this.startCallback(this.selectedMode);
+                    // this.startCallback(this.selectedMode);
+                    this.startCallback(this.selectedMode, this.selectedGameFlow);
+
                 }
                 return;
             }
@@ -1798,6 +1840,23 @@ class MainMenu {
             ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         }
 
+        //draw mode buttons
+        ctx.save();
+        ctx.fillStyle = "#fff";
+        const Size = Math.max(14, 24 * this.ratio); // never go below 14px
+        ctx.font = `${Size}px Montserrat`;
+        ctx.fillText("Game Modes", 80, 200);
+
+        for (let btn of this.modeButtons) {
+            const isHovered = this.hoveredButton === btn;
+            drawButton(this.context, {
+                ...btn,
+                imageName: btn.selected ? "btnsmall" : "button" // Optional: highlight selected
+            }, isHovered, this.assets);
+        }
+        ctx.restore();
+
+
         // Draw title
         ctx.fillStyle = "#fff";
 
@@ -1807,7 +1866,7 @@ class MainMenu {
         ctx.fillText("Piece Perfect", this.canvas.width / 2, 100);
 
         // Draw subtitle
-        const Size = Math.max(14, 24 * this.ratio); // never go below 14px
+        // const Size = Math.max(14, 24 * this.ratio); // never go below 14px
         ctx.font = `${Size}px Montserrat`;
         ctx.fillText("Select your puzzle style", this.canvas.width / 2, 150);
 
