@@ -264,7 +264,7 @@ class PuzzlePiece {
 }
 
 class Game {
-    constructor(canvas, context, imageSrc, rows, cols, mode, assets, ImagePath, selectedGameFlow) {
+    constructor(canvas, context, imageSrc, rows, cols, mode, assets, ImagePath, selectedGameFlow, images) {
         this.assets = assets;
         this.canvas = canvas;
         this.canvas.width = this.canvas.width;
@@ -275,6 +275,7 @@ class Game {
         this.cols = cols;
         this.imagePath = ImagePath;
         this.selectedGameFlow = selectedGameFlow;
+        this.images = images;
         this.hoveredButton = null;
 
         this.pieces = [];
@@ -341,11 +342,20 @@ class Game {
         this.startButton = { 
             width: 160, 
             height: 50,
-            x: (this.canvas.width - 160) / 2, // Center horizontally
+            x: (this.canvas.width - 160) / 2 - 85, // Center horizontally
             y: (this.canvas.height - 80),  // Center vertically
             label: "Start"
         };
-        //EventListener for start button.
+
+        this.nextImageButton = {
+            width: 160,
+            height: 50,
+            x: (this.canvas.width - 160) / 2 + 85, // Right of start button
+            y: this.canvas.height - 80,
+            label: "Next Image"
+        };
+
+        //EventListener for preshuffle buttons.
         this.startButtonEvent = this.startButtonEvent.bind(this);
         this.canvas.addEventListener("mousedown", this.startButtonEvent);
 
@@ -353,6 +363,7 @@ class Game {
         this.countdownLossTime = 10; // e.g., 60 seconds to solve
         this.countdownInterval = null;
         this.gameCountDown;
+        console.log(this.images);
     }
 
      startTimer() {
@@ -476,6 +487,7 @@ class Game {
     loadImage() {
         this.image = new Image();
         this.image.src = this.imageSrc;
+        // this.image.src = this.images;
     
         //with in boundary
         this.image.onload = () => {
@@ -922,25 +934,54 @@ class Game {
         this.saveState();
     }
 
+    // startButtonEvent(event) {
+    //     // Handle start button click during pre-shuffle
+    //     if (this.preShuffle) {
+    //         const rect = this.canvas.getBoundingClientRect();
+    //         const scaleX = this.canvas.width / rect.width;
+    //         const scaleY = this.canvas.height / rect.height;
+            
+    //         const offsetX = (event.clientX - rect.left) * scaleX;
+    //         const offsetY = (event.clientY - rect.top) * scaleY;
+    //         const b = this.startButton;
+
+    //         if (offsetX >= b.x && offsetX <= b.x + b.width &&
+    //             offsetY >= b.y && offsetY <= b.y + b.height) {
+    //             console.log('button click')
+    //             this.startGame();
+    //             return;
+    //         }
+
+    //         return; // Don't process other clicks during pre-shuffle
+    //     }
+    // }
     startButtonEvent(event) {
-        // Handle start button click during pre-shuffle
         if (this.preShuffle) {
             const rect = this.canvas.getBoundingClientRect();
             const scaleX = this.canvas.width / rect.width;
             const scaleY = this.canvas.height / rect.height;
-            
+
             const offsetX = (event.clientX - rect.left) * scaleX;
             const offsetY = (event.clientY - rect.top) * scaleY;
-            const b = this.startButton;
 
+            const b = this.startButton;
+            const n = this.nextImageButton;
+
+            // Start button
             if (offsetX >= b.x && offsetX <= b.x + b.width &&
                 offsetY >= b.y && offsetY <= b.y + b.height) {
-                console.log('button click')
                 this.startGame();
                 return;
             }
 
-            return; // Don't process other clicks during pre-shuffle
+            // Next image button
+            if (offsetX >= n.x && offsetX <= n.x + n.width &&
+                offsetY >= n.y && offsetY <= n.y + n.height) {
+                this.loadNextImage();
+                return;
+            }
+
+            return;
         }
     }
 
@@ -967,6 +1008,29 @@ class Game {
         
         // this.needsRender = true;
         this.render();
+    }
+
+    loadNextImage() {
+        const currentIndex = this.imagePath.indexOf(this.images);
+        const nextIndex = (currentIndex + 1) % this.images.length;
+        const nextImage = this.images[nextIndex].src;
+
+         // ✅ Clean up the current screen before starting the next one
+        this.destroy();
+        if (typeof currentScreen?.destroy === "function") currentScreen.destroy();
+
+        currentScreen = new Game(
+            this.canvas,
+            this.context,
+            nextImage,
+            this.rows,
+            this.cols,
+            this.mode,
+            this.assets,
+            this.imagePath,
+            this.selectedGameFlow,
+            this.images
+        );
     }
 
     checkVictory() {
@@ -1017,6 +1081,9 @@ class Game {
 
         // Stop timer
         clearInterval(this.timerInterval);
+        clearInterval(this.countdownInterval);
+        clearTimeout(this.shuffleTimeout);
+        clearInterval(this.gameCountDownInterval);
     }
 
     handleButtonAction(action) {
@@ -1042,7 +1109,8 @@ class Game {
                         this.mode,
                         this.assets,
                         this.imagePath, // include this if you're tracking available images
-                        this.selectedGameFlow
+                        this.selectedGameFlow,
+                        this.images
                     );
                     currentScreen.render();
                 }
@@ -1056,13 +1124,13 @@ class Game {
                             currentScreen.destroy();
                             currentScreen = new ImageSelectMenu(this.canvas, this.context, 
                                 selectedMode, 
-                                (mode, imagePath, rows, cols) => {
+                                (mode, imagePath, rows, cols, images) => {
                                     currentScreen.destroy();
                                     currentScreen = new Game(this.canvas, this.context, imagePath, rows, cols, 
-                                        mode, this.assets, imagePath, this.selectedGameFlow// Pass along the assets
+                                        mode, this.assets, imagePath, this.images
                                     );
                                 }, 
-                                this.assets , this.selectedGameFlow// Pass assets to ImageSelectMenu
+                                this.assets , selectedGameFlow// Pass assets to ImageSelectMenu
                             );
                             currentScreen.render();
                         }, this.assets); // Pass assets to MainMenu
@@ -1212,7 +1280,8 @@ class Game {
                 this.mode,
                 this.assets,
                 this.imagePath,
-                this.selectedGameFlow
+                this.selectedGameFlow,
+                this.images
             );
         },
         this.assets,
@@ -1314,6 +1383,7 @@ class Game {
             // Draw start button using the existing drawButton function
             this.context.drawImage(this.image, this.drawX, this.drawY, this.drawWidth, this.drawHeight);
             drawButton(this.context, this.startButton, false, this.assets);
+            drawButton(this.context, this.nextImageButton, false, this.assets);
 
             // Countdown over the grid
             this.context.fillStyle = "rgba(216, 221, 230, 0.7)";
@@ -1503,7 +1573,7 @@ class VictoryScreen {
             : this.imagePath[0];
            
             currentScreen = new Game(this.canvas, this.context, newImage, this.rows, 
-                this.cols, this.mode, this.assets, this.imagePath, this.selectedGameFlow);
+                this.cols, this.mode, this.assets, this.imagePath, this.selectedGameFlow, this.images);
             return;
         }
 
@@ -1514,10 +1584,10 @@ class VictoryScreen {
             // Transition back to Main Menu
             currentScreen = new MainMenu(this.canvas, this.context, (selectedMode, selectedGameFlow) => {
                 currentScreen.destroy?.();
-                currentScreen = new ImageSelectMenu(this.canvas, this.context, selectedMode, (mode, imagePath, rows, cols) => {
+                currentScreen = new ImageSelectMenu(this.canvas, this.context, selectedMode, (mode, imagePath, rows, cols, images) => {
                     currentScreen.destroy?.();
                     currentScreen = new Game(this.canvas, this.context, imagePath,  rows, cols, mode, this.assets, imagePath,this.selectedGameFlow);
-                }, this.assets, this.selectedGameFlow);
+                }, this.assets, this.selectedGameFlow, this.images);
                 currentScreen.render();
             }, this.assets);
             currentScreen.render();
@@ -1729,7 +1799,7 @@ class MainMenu {
         // this.canvas.height = this.canvas.height * this.ratio;
 
         //button hover effect
-        // enableButtonHoverTracking(this);
+        enableButtonHoverTracking(this);
 
         // Main buttons
         this.buttons = [
@@ -1764,8 +1834,8 @@ class MainMenu {
                 y: 220,
                 width: 140,
                 height: 50,
-                selected: true,
-                type: "normal"
+                selected: false,
+                type: "normal",
             },
             {
                 label: "Countdown",
@@ -1811,7 +1881,7 @@ class MainMenu {
     destroy() {
         this.canvas.removeEventListener("click", this.boundHandleClick);
         // this.canvas.removeEventListener("mousemove", this.handleMouseMove);
-        // this.canvas.removeEventListener("mousemove", this._onMouseMove);
+        this.canvas.removeEventListener("mousemove", this._onMouseMove);
       }
 
     // Helper function to wrap text within a width
@@ -1935,24 +2005,12 @@ class MainMenu {
             ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         }
 
-        //draw mode buttons
-        ctx.save();
-        ctx.fillStyle = "#fff";
-        const Size = Math.max(14, 24 * this.ratio); // never go below 14px
-        ctx.font = `${Size}px Montserrat`;
-        ctx.fillText("Game Modes", 80, 200);
-
-        for (let btn of this.modeButtons) {
-            const isHovered = this.hoveredButton === btn;
-            drawButton(this.context, {
-                ...btn,
-                imageName: btn.selected ? "btnsmall" : "button" // Optional: highlight selected
-            }, isHovered, this.assets);
-        }
-        ctx.restore();
+       
+        
 
 
         // Draw title
+        ctx.save();
         ctx.fillStyle = "#fff";
 
         const fontSize = Math.max(14, 72 * this.ratio); // never go below 14px
@@ -1961,9 +2019,10 @@ class MainMenu {
         ctx.fillText("Piece Perfect", this.canvas.width / 2, 100);
 
         // Draw subtitle
-        // const Size = Math.max(14, 24 * this.ratio); // never go below 14px
+        const Size = Math.max(14, 24 * this.ratio); // never go below 14px
         ctx.font = `${Size}px Montserrat`;
         ctx.fillText("Select your puzzle style", this.canvas.width / 2, 150);
+        ctx.restore();
 
         const cardImg = this.assets.get("card");
 
@@ -2049,6 +2108,36 @@ class MainMenu {
             const isHovered = this.hoveredButton === btn;
             drawButton(this.context, btn, isHovered, this.assets);
         }
+
+         //draw mode buttons
+        ctx.save();
+        // ctx.fillStyle = "#fff";
+        const txtSize = Math.max(14, 24 * this.ratio); // never go below 14px
+        ctx.font = `${Size}px Montserrat`;
+        ctx.textAlign = "left";
+        ctx.textBaseline = "middle";
+        ctx.fillText("Game Modes", 80, 200);
+
+        for (let btn of this.modeButtons) {
+            // const isHovered = this.hoveredButton === btn;
+            //indicate selection
+            if (btn.selected) {
+                ctx.shadowColor = 'grey';
+                ctx.shadowBlur = 10;
+                ctx.shadowOffsetY = 0;
+                ctx.strokeStyle = 'white';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.roundRect(btn.x, btn.y, btn.width, btn.height, 6);
+                ctx.stroke();
+            }
+            //draw btn
+            drawButton(this.context, {
+                ...btn,
+                imageName: btn.selected ? "btnsmall" : "button" // Optional: highlight selected
+            }, false, this.assets);
+        }
+        ctx.restore();
     }
 }
 
@@ -2261,32 +2350,73 @@ class ImageSelectMenu {
         });
     }
 
+    // setupUploadUI() {
+    //     this.fileInput = document.createElement("input");
+    //     this.fileInput.type = "file";
+    //     this.fileInput.accept = "image/*";
+    //     this.fileInput.style.display = "none";
+
+    //     this.fileInput.addEventListener("change", (e) => {
+    //         const file = e.target.files[0];
+    //         if (file) {
+    //             const url = URL.createObjectURL(file);
+    //             this.thumbnails.push({
+    //                 src: url,
+    //                 label: "Your Image",
+    //                 image: (() => {
+    //                     const img = new Image();
+    //                     img.src = url;
+    //                     img.onload = () => this.render();
+    //                     return img;
+    //                 })()
+    //             });
+    //             this.render();
+    //         }
+    //     });
+
+    //     document.body.appendChild(this.fileInput);
+    // }
     setupUploadUI() {
-        this.fileInput = document.createElement("input");
-        this.fileInput.type = "file";
-        this.fileInput.accept = "image/*";
-        this.fileInput.style.display = "none";
+    this.fileInput = document.createElement("input");
+    this.fileInput.type = "file";
+    this.fileInput.accept = "image/*";
+    this.fileInput.style.display = "none";
 
-        this.fileInput.addEventListener("change", (e) => {
-            const file = e.target.files[0];
-            if (file) {
-                const url = URL.createObjectURL(file);
-                this.thumbnails.push({
-                    src: url,
-                    label: "Your Image",
-                    image: (() => {
-                        const img = new Image();
-                        img.src = url;
-                        img.onload = () => this.render();
-                        return img;
-                    })()
-                });
-                this.render();
+    this.fileInput.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (file) {
+        const url = URL.createObjectURL(file);
+        const uploadedImg = new Image();
+
+        uploadedImg.onload = () => {
+            // ✅ Build full image list: start with uploaded image, then add all other thumbnails
+            const imageList = [uploadedImg];
+
+            for (let thumb of this.thumbnails) {
+                // Skip duplicates (e.g., if same src)
+                if (thumb.src !== uploadedImg.src) {
+                    imageList.push(thumb.image); // Add original <img> objects
+                }
             }
-        });
 
-        document.body.appendChild(this.fileInput);
+            // ✅ Immediately start the game with the uploaded image
+            this.startGameCallback(
+                this.mode,
+                uploadedImg.src,
+                this.rows,
+                this.cols,
+                this.selectedGameFlow,
+                this.images
+            );
+        };
+
+        uploadedImg.src = url;
     }
+});
+
+
+    document.body.appendChild(this.fileInput);
+}
 
     handleClick(event) {
         const rect = this.canvas.getBoundingClientRect();
@@ -2329,10 +2459,9 @@ class ImageSelectMenu {
         for (const thumb of this.thumbnails) {
             if (x >= thumb.x && x <= thumb.x + this.thumbWidth &&
                 y >= thumb.y && y <= thumb.y + this.thumbHeight) {
-                const gameFlow = this.selectedGameFlow;
+                const imageSrc = this.images;
                 this.destroy()
-                this.startGameCallback(this.mode, thumb.src, this.rows, this.cols, this.selectedGameFlow);
-                 console.log("ImageSelectMenu selectedGameFlow:", this.selectedGameFlow);
+                this.startGameCallback(this.mode, thumb.src, this.rows, this.cols, this.selectedGameFlow, this.images);
                 return;
             }
         }
@@ -2487,10 +2616,10 @@ window.addEventListener("load", () => {
 
     currentScreen = new MainMenu(this.canvas, this.context, (selectedMode, selectedGameFlow) => {
         currentScreen.destroy();
-        currentScreen = new ImageSelectMenu(this.canvas, this.context, selectedMode, (mode, imagePath, rows, cols, selectedGameFlow) => {
+        currentScreen = new ImageSelectMenu(this.canvas, this.context, selectedMode, (mode, imagePath, rows, cols, selectedGameFlow, images) => {
             currentScreen.destroy();
-            currentScreen = new Game(this.canvas, this.context, newImage,  rows, cols, mode, this.assets,imagePath, 
-                selectedGameFlow);
+            currentScreen = new Game(this.canvas, this.context, newImage,  rows, cols, mode, this.assets, 
+                selectedGameFlow, images);
         }, assets, selectedGameFlow);
         currentScreen.render();
     }, assets, resizeMgr);
@@ -2501,10 +2630,10 @@ window.addEventListener("load", () => {
         const mainMenu = new MainMenu(canvas, context, (selectedMode, selectedGameFlow) => {
             if (currentScreen && currentScreen.destroy) currentScreen.destroy();
 
-            const imageMenu = new ImageSelectMenu(canvas, context, selectedMode, (mode, imagePath, rows, cols, selectedGameFlow) => {
+            const imageMenu = new ImageSelectMenu(canvas, context, selectedMode, (mode, imagePath, rows, cols, selectedGameFlow, images) => {
                 if (currentScreen && currentScreen.destroy) currentScreen.destroy();
 
-                const game = new Game(canvas, context, imagePath, rows, cols, mode, assets,imagePath, selectedGameFlow);
+                const game = new Game(canvas, context, imagePath, rows, cols, mode, assets,imagePath, selectedGameFlow, images);
                 currentScreen = game; // optional for future game teardown
             }, assets, selectedGameFlow);
 
