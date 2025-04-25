@@ -337,6 +337,7 @@ class Game {
         // ===================> pre–shuffle mode<===============================
         this.preShuffle = true;
         this.countdownTime = 5; // in seconds
+        this.countdownInterval = null;
     
         this.shuffleTimeout = null;
         this.startButton = { 
@@ -360,9 +361,10 @@ class Game {
         this.canvas.addEventListener("mousedown", this.startButtonEvent);
 
         //=====================> Game modes <=====================================
-        this.countdownLossTime = 60 * 1; // e.g., 60 seconds to solve
-        this.countdownInterval = null;
+        this.countdownLossTime = 60 * 0.5; // e.g., 60 seconds to solve
         this.gameCountDown;
+        this.gameCountDownInterval = null;
+
         console.log(this.images);
     }
 
@@ -382,15 +384,44 @@ class Game {
         this.isTimerRunning = false;
     }
 
+    // togglePause() {
+    //     if (this.isTimerRunning) {
+    //         this.pauseTimer();
+    //         this.userPaused = true;
+    //         this.buttons.find(b => b.action === "pause").label = "Resume";
+    //     } else {
+    //         this.resumeTimer();
+    //         this.userPaused = false;
+    //         this.buttons.find(b => b.action === "pause").label = "Pause";
+    //     }
+    //     this.render();
+    // }
     togglePause() {
         if (this.isTimerRunning) {
             this.pauseTimer();
             this.userPaused = true;
             this.buttons.find(b => b.action === "pause").label = "Resume";
+            
+            // Also pause the countdown if in countdown mode
+            if (this.selectedGameFlow === "countdown") {
+                clearInterval(this.gameCountDownInterval);
+            }
         } else {
             this.resumeTimer();
             this.userPaused = false;
             this.buttons.find(b => b.action === "pause").label = "Pause";
+            
+            // Also resume the countdown if in countdown mode
+            if (this.selectedGameFlow === "countdown") {
+                this.gameCountDownInterval = setInterval(() => {
+                    this.gameCountDown--;
+                    if (this.gameCountDown <= 0) {
+                        clearInterval(this.gameCountDownInterval);
+                        this.isGameOver = true;
+                    }
+                    this.render();
+                }, 1000);
+            }
         }
         this.render();
     }
@@ -531,7 +562,7 @@ class Game {
 
     handleGameModes() {
         if (this.selectedGameFlow === "countdown") {
-              this.gameCountDown = this.countdownLossTime;
+            this.gameCountDown = this.countdownLossTime;
 
             this.gameCountDownInterval = setInterval(() => {
                 this.gameCountDown--;
@@ -542,9 +573,9 @@ class Game {
                     this.render();
                 }
 
-                // this.render();
+                this.render();
             }, 1000);
-        };
+        }
     }
 
     startGame() {
@@ -565,8 +596,8 @@ class Game {
         this.handleGameModes();
         //==============================
         //use render if no interested in animation
-        this.render();
-        // this.startRenderingLoop(); 
+        // this.render();
+        this.startRenderingLoop(); 
     }
 
     createPieces() {
@@ -1104,6 +1135,7 @@ class Game {
             case "restart":
                 if (confirm("Restart the puzzle?")) {
                     this.destroy();
+                    currentScreen.destroy();
                     currentScreen = new Game(
                         this.canvas,
                         this.context,
@@ -1296,7 +1328,8 @@ class Game {
         this.cols,
         gameSnapshot, // ✅ New: pass the image
         bestTime,
-        this.selectedGameFlow
+        this.selectedGameFlow,
+        this.images
         );
 
     }
@@ -1485,7 +1518,7 @@ class Game {
 
 class VictoryScreen {
      constructor(canvas, context, timeElapsed, onPlayAgain, assets,
-        imagePath, lastImage, mode, rows, cols, backgroundSnapshot, bestTime, selectedGameFlow) {
+        imagePath, lastImage, mode, rows, cols, backgroundSnapshot, bestTime, selectedGameFlow, images) {
 
         this.canvas = canvas;
         this.context = context;
@@ -1500,6 +1533,7 @@ class VictoryScreen {
         this.backgroundSnapshot = backgroundSnapshot; // ✅ frozen game view
         this.bestTime = bestTime;
         this.selectedGameFlow = selectedGameFlow;
+        this.images = images;
 
         this.showDelay = true;
         this.revealTimer = setTimeout(() => {
@@ -1586,6 +1620,7 @@ class VictoryScreen {
         if (this.timeElapsed < 30) return 3;
         if (this.timeElapsed < 60) return 2;
         return 1;
+        console.log(this.timeElapsed);
     }
 
     handleClick(event) {
@@ -2067,9 +2102,9 @@ class MainMenu {
                 ctx.shadowBlur = 20;
                 ctx.shadowOffsetY = 0;
                 ctx.strokeStyle = 'white';
-                ctx.lineWidth = 4;
+                ctx.lineWidth = 2;
                 ctx.beginPath();
-                ctx.roundRect(left, top, mode.width, mode.height, 32);
+                ctx.roundRect(left, top, mode.width, mode.height, 30);
                 ctx.stroke();
             }
 
