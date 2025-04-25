@@ -361,7 +361,7 @@ class Game {
         this.canvas.addEventListener("mousedown", this.startButtonEvent);
 
         //=====================> Game modes <=====================================
-        this.countdownLossTime = 60 * 0.5; // e.g., 60 seconds to solve
+        this.countdownLossTime = 60 * 5; // e.g., 60 seconds to solve
         this.gameCountDown;
         this.gameCountDownInterval = null;
 
@@ -1615,12 +1615,35 @@ class VictoryScreen {
         }
     }
 
-    getStarRating() {
-        // Simple scoring based on time (you can customize this!)
-        if (this.timeElapsed < 30) return 3;
-        if (this.timeElapsed < 60) return 2;
-        return 1;
-        console.log(this.timeElapsed);
+    // getStarRating() {
+    //     // Simple scoring based on time (you can customize this!)
+    //     if (this.timeElapsed < 30) return 3;
+    //     if (this.timeElapsed < 60) return 2;
+    //     return 1;
+    //     console.log(this.timeElapsed);
+    // }
+     getStarRating() {
+        // Convert time string "MM:SS" to total seconds
+        const [minutes, seconds] = this.timeElapsed.split(':').map(Number);
+        const totalSeconds = minutes * 60 + seconds;
+
+        // Define rating thresholds (adjust these values as needed)
+        const ratingThresholds = {
+            3: 60,    // 3 stars if completed in 1 minute or less
+            2: 180,    // 2 stars if completed in 3 minutes or less
+            1: 300     // 1 star if completed in 5 minutes or less
+        };
+
+        // Determine rating based on time
+        if (totalSeconds <= ratingThresholds[3]) {
+            return 3;
+        } else if (totalSeconds <= ratingThresholds[2]) {
+            return 2;
+        } else if (totalSeconds <= ratingThresholds[1]) {
+            return 1;
+        } else {
+            return 0; // No stars for very slow completion
+        }
     }
 
     handleClick(event) {
@@ -1712,26 +1735,40 @@ class VictoryScreen {
             ctx.fillText("🎉 You Did It!", this.canvas.width / 2, 100);
 
             const rating = this.getStarRating();
+            
+            // Draw stars using emoji
+            // const starSize = 60;
+            // const starSpacing = 20;
+            // const totalWidth = (rating * starSize) + ((rating - 1) * starSpacing);
+            // const startX = (this.canvas.width - totalWidth) / 2;
+            // const y = 160;
 
-            // Draw stars
+            // for (let i = 0; i < rating; i++) {
+            //     ctx.font = `${starSize}px Arial`;
+            //     ctx.fillText(
+            //         "⭐", 
+            //         startX + (i * (starSize + starSpacing)) + (starSize / 2), 
+            //         y + (starSize / 2)
+            //     );
+            // }
+
+            // Draw stars using emoji - show empty stars for unearned ratings
             const starSize = 60;
-            const totalWidth = rating * starSize + (rating - 1) * 10;
+            const starSpacing = 20;
+            const totalWidth = (3 * starSize) + (2 * starSpacing); // Always show 3 star positions
             const startX = (this.canvas.width - totalWidth) / 2;
             const y = 160;
 
-            for (let i = 0; i < rating; i++) {
-                ctx.fillStyle = "gold";
-                ctx.beginPath();
-                ctx.moveTo(startX + i * (starSize + 10) + starSize / 2, y);
-                for (let j = 0; j < 5; j++) {
-                    const angle = (Math.PI / 5) * (2 * j + 1);
-                    const x = Math.cos(angle) * (starSize / 2);
-                    const yy = Math.sin(angle) * (starSize / 2);
-                    ctx.lineTo(startX + i * (starSize + 10) + starSize / 2 + x, y + yy);
-                }
-                ctx.closePath();
-                ctx.fill();
+            for (let i = 0; i < 3; i++) {
+                ctx.font = `${starSize}px Arial`;
+                // Show filled star if earned, empty star if not
+                ctx.fillText(
+                    i < rating ? "⭐" : "☆", 
+                    startX + (i * (starSize + starSpacing)) + (starSize / 2), 
+                    y + (starSize / 2)
+                );
             }
+            // console.log(rating);
 
             // Show time
             ctx.fillStyle = "#fff";
