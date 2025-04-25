@@ -314,6 +314,7 @@ class Game {
             { label: "Restart", action: "restart" },
             { label: "Exit", action: "exit" }
         ];
+        this.buttonsVisible = true;
 
         this.gameOverButtons = [
             {
@@ -364,6 +365,8 @@ class Game {
         this.countdownLossTime = 60 * 5; // e.g., 60 seconds to solve
         this.gameCountDown;
         this.gameCountDownInterval = null;
+
+        this.gameSnapshot;
 
         console.log(this.images);
     }
@@ -1240,6 +1243,17 @@ class Game {
 
         // Check victory
         if (this.checkVictory()) {
+            // Hide buttons before taking snapshot
+            this.buttonsVisible = false;
+            this.render(); // Force immediate render without buttons
+            
+            // Take snapshot without buttons
+            this.gameSnapshot = this.canvas.cloneNode();
+            this.gameSnapshot.getContext("2d").drawImage(this.canvas, 0, 0);
+            
+            // Restore buttons visibility for any remaining renders
+            this.buttonsVisible = true
+
             clearInterval(this.gameCountDownInterval); // stop countdown if victory
             this.showVictoryMessage();
         }
@@ -1280,8 +1294,8 @@ class Game {
         const timer = this.formatTime(this.elapsedTime);
 
         //save game screen
-        const gameSnapshot = this.canvas.cloneNode();
-        gameSnapshot.getContext("2d").drawImage(this.canvas, 0, 0);
+        // const gameSnapshot = this.canvas.cloneNode();
+        // gameSnapshot.getContext("2d").drawImage(this.canvas, 0, 0);
 
         const key = getBestTimeKey(this.mode, this.rows, this.cols, this.imageSrc);
         const currentBest = parseInt(localStorage.getItem(key));
@@ -1326,7 +1340,7 @@ class Game {
         this.mode,
         this.rows,
         this.cols,
-        gameSnapshot, // ✅ New: pass the image
+        this.gameSnapshot, // ✅ New: pass the image
         bestTime,
         this.selectedGameFlow,
         this.images
@@ -1344,19 +1358,45 @@ class Game {
     }
 
     renderButtons() {
-        if (this.isGameOver) return;
-        const ctx = this.context;
-        const buttonWidth = 120;
-        const buttonHeight = 40;
-        const gap = 15;
+        // if (this.isGameOver) return;
+         if (this.isGameOver) return;
 
-        const totalHeight = this.buttons.length * buttonHeight + (this.buttons.length - 1) * gap;
-        const startY = (this.canvas.height - totalHeight) / 2;
-        // const x = this.drawX - buttonWidth - 20; // left of the grid
-        const x = 60; // left of the grid
+            const ctx = this.context;
+            const buttonWidth = 120;
+            const buttonHeight = 40;
+            const gap = 15;
 
-        ctx.font = "18px Arial";
-        ctx.textAlign = "center";
+            const totalHeight = this.buttons.length * buttonHeight + (this.buttons.length - 1) * gap;
+            const startY = (this.canvas.height - totalHeight) / 2;
+            // const x = this.drawX - buttonWidth - 20; // left of the grid
+            const x = 60; // left of the grid
+
+            ctx.font = "18px Arial";
+            ctx.textAlign = "center";
+         if (!this.buttonsVisible) {
+           
+             for (let i = 0; i < this.buttons.length; i++) {
+                    const btn = this.buttons[i];
+                    btn.x = x;
+                    btn.y = startY + i * (buttonHeight + gap);
+                    btn.width = buttonWidth;
+                    btn.height = buttonHeight;
+
+                    ctx.save();
+                    ctx.globalAlpha = 0.4; // opacity
+                    const isHovered = this.hoveredButton === btn;
+                    drawButton(ctx, btn, isHovered, this.assets);
+                    ctx.globalCompositeOperation = "multiply"; // Apply tint
+                    ctx.fillStyle = "rgba(51, 51, 51)"; //  tint
+                    ctx.beginPath();
+                    ctx.roundRect(btn.x, btn.y, btn.width, btn.height, 6);
+                    ctx.fill();
+                    ctx.globalCompositeOperation = "source-over"; // Reset
+                    ctx.restore();
+            }
+            return; 
+        } 
+        
 
         for (let i = 0; i < this.buttons.length; i++) {
             const btn = this.buttons[i];
@@ -1377,7 +1417,7 @@ class Game {
 //     // Update other buttons if needed
 // }
     displayTimer() {
-        if (this.isGameOver) return;
+        if (this.isGameOver || !this.buttonsVisible) return;
         
         let timerText;
         let countDown = this.gameCountDown * 1000;
@@ -1566,6 +1606,11 @@ class VictoryScreen {
             setTimeout(() => this.spawnSmallConfetti(), delay + i * this.explosionInterval);
         }
 
+        // Store the completed puzzle image
+        this.completedImage = new Image();
+        this.completedImage.src = lastImage;
+        this.completedImage.onload = () => this.render();
+
         requestAnimationFrame(this.animate);
         // console.log(this.bestTime);
 
@@ -1718,6 +1763,51 @@ class VictoryScreen {
             ctx.fillStyle = "#111";
             ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         }
+        // Clear canvas
+        // ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // if (this.showDelay) {
+
+        //      const bg = this.assets.get("background");
+        //         if (bg && bg.complete) {
+        //             this.context.drawImage(bg, 0, 0, this.canvas.width, this.canvas.height);
+        //         } else {
+        //             this.context.fillStyle = "#222";
+        //             this.context.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        //         }
+        //     // Display the completed puzzle image during delay
+        //     if (this.completedImage.complete) {
+        //         // Calculate dimensions to maintain aspect ratio
+        //         const maxWidth = this.canvas.width * 0.9;
+        //         const maxHeight = this.canvas.height * 0.9;
+        //         const ratio = Math.min(
+        //             maxWidth / this.completedImage.width,
+        //             maxHeight / this.completedImage.height
+        //         );
+        //         const width = this.completedImage.width * ratio;
+        //         const height = this.completedImage.height * ratio;
+        //         const x = (this.canvas.width - width) / 2;
+        //         const y = (this.canvas.height - height) / 2;
+
+        //         // Draw image
+        //         ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        //         ctx.drawImage(this.completedImage, x, y, width, height);
+
+        //         // Draw "Congratulations" text
+        //         ctx.fillStyle = "#fff";
+        //         ctx.font = "bold 48px Arial";
+        //         ctx.textAlign = "center";
+        //         ctx.fillText("Congratulations!", this.canvas.width / 2, 80);
+        //     }
+        // } else {
+        //     // Original victory screen display after delay
+        //     if (this.backgroundSnapshot) {
+        //         ctx.drawImage(this.backgroundSnapshot, 0, 0, this.canvas.width, this.canvas.height);
+        //     } else {
+        //         ctx.fillStyle = "#111";
+        //         ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+        //     }
+        // }
 
         // Draw confetti
         for (let p of this.confetti) {
@@ -1726,32 +1816,18 @@ class VictoryScreen {
 
         //draw other ui elements after delay.
         if (!this.showDelay) {
-            ctx.fillStyle = "rgba(0, 0, 0, 0.4)";
+            //dark overlay
+            ctx.fillStyle = "rgba(0, 0, 0, 0.2)";
             ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
 
+            //text
             ctx.fillStyle = "#fff";
             ctx.font = "48px Arial";
             ctx.textAlign = "center";
             ctx.fillText("🎉 You Did It!", this.canvas.width / 2, 100);
 
+            //============= Rating ============================
             const rating = this.getStarRating();
-            
-            // Draw stars using emoji
-            // const starSize = 60;
-            // const starSpacing = 20;
-            // const totalWidth = (rating * starSize) + ((rating - 1) * starSpacing);
-            // const startX = (this.canvas.width - totalWidth) / 2;
-            // const y = 160;
-
-            // for (let i = 0; i < rating; i++) {
-            //     ctx.font = `${starSize}px Arial`;
-            //     ctx.fillText(
-            //         "⭐", 
-            //         startX + (i * (starSize + starSpacing)) + (starSize / 2), 
-            //         y + (starSize / 2)
-            //     );
-            // }
-
             // Draw stars using emoji - show empty stars for unearned ratings
             const starSize = 60;
             const starSpacing = 20;
