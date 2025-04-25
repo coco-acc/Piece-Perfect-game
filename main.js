@@ -337,6 +337,7 @@ class Game {
         // ===================> pre–shuffle mode<===============================
         this.preShuffle = true;
         this.countdownTime = 5; // in seconds
+        this.countdownInterval = null;
     
         this.shuffleTimeout = null;
         this.startButton = { 
@@ -360,9 +361,10 @@ class Game {
         this.canvas.addEventListener("mousedown", this.startButtonEvent);
 
         //=====================> Game modes <=====================================
-        this.countdownLossTime = 10; // e.g., 60 seconds to solve
-        this.countdownInterval = null;
+        this.countdownLossTime = 60 * 0.5; // e.g., 60 seconds to solve
         this.gameCountDown;
+        this.gameCountDownInterval = null;
+
         console.log(this.images);
     }
 
@@ -382,15 +384,44 @@ class Game {
         this.isTimerRunning = false;
     }
 
+    // togglePause() {
+    //     if (this.isTimerRunning) {
+    //         this.pauseTimer();
+    //         this.userPaused = true;
+    //         this.buttons.find(b => b.action === "pause").label = "Resume";
+    //     } else {
+    //         this.resumeTimer();
+    //         this.userPaused = false;
+    //         this.buttons.find(b => b.action === "pause").label = "Pause";
+    //     }
+    //     this.render();
+    // }
     togglePause() {
         if (this.isTimerRunning) {
             this.pauseTimer();
             this.userPaused = true;
             this.buttons.find(b => b.action === "pause").label = "Resume";
+            
+            // Also pause the countdown if in countdown mode
+            if (this.selectedGameFlow === "countdown") {
+                clearInterval(this.gameCountDownInterval);
+            }
         } else {
             this.resumeTimer();
             this.userPaused = false;
             this.buttons.find(b => b.action === "pause").label = "Pause";
+            
+            // Also resume the countdown if in countdown mode
+            if (this.selectedGameFlow === "countdown") {
+                this.gameCountDownInterval = setInterval(() => {
+                    this.gameCountDown--;
+                    if (this.gameCountDown <= 0) {
+                        clearInterval(this.gameCountDownInterval);
+                        this.isGameOver = true;
+                    }
+                    this.render();
+                }, 1000);
+            }
         }
         this.render();
     }
@@ -531,7 +562,7 @@ class Game {
 
     handleGameModes() {
         if (this.selectedGameFlow === "countdown") {
-              this.gameCountDown = this.countdownLossTime;
+            this.gameCountDown = this.countdownLossTime;
 
             this.gameCountDownInterval = setInterval(() => {
                 this.gameCountDown--;
@@ -542,9 +573,9 @@ class Game {
                     this.render();
                 }
 
-                // this.render();
+                this.render();
             }, 1000);
-        };
+        }
     }
 
     startGame() {
@@ -563,7 +594,10 @@ class Game {
         this.destroyStartButton();
         this.startTimer();
         this.handleGameModes();
-        this.render();
+        //==============================
+        //use render if no interested in animation
+        // this.render();
+        this.startRenderingLoop(); 
     }
 
     createPieces() {
@@ -1017,7 +1051,8 @@ class Game {
 
          // ✅ Clean up the current screen before starting the next one
         this.destroy();
-        if (typeof currentScreen?.destroy === "function") currentScreen.destroy();
+        // if (typeof currentScreen?.destroy === "function")
+        currentScreen.destroy();
 
         currentScreen = new Game(
             this.canvas,
@@ -1100,6 +1135,7 @@ class Game {
             case "restart":
                 if (confirm("Restart the puzzle?")) {
                     this.destroy();
+                    currentScreen.destroy();
                     currentScreen = new Game(
                         this.canvas,
                         this.context,
@@ -1292,9 +1328,19 @@ class Game {
         this.cols,
         gameSnapshot, // ✅ New: pass the image
         bestTime,
-        this.selectedGameFlow
+        this.selectedGameFlow,
+        this.images
         );
 
+    }
+
+    startRenderingLoop() {
+        const loop = () => {
+            if (this.isGameOver || this.victory || this._destroyed) return; // Stop when game ends
+            this.render();
+            requestAnimationFrame(loop);
+        };
+        requestAnimationFrame(loop);
     }
 
     renderButtons() {
@@ -1332,10 +1378,31 @@ class Game {
 // }
     displayTimer() {
         if (this.isGameOver) return;
-        this.context.fillStyle = 'white';
+        
+        let timerText;
+        let countDown = this.gameCountDown * 1000;
+        if (this.selectedGameFlow === "countdown") {
+            timerText = `Time: ${this.formatTime(countDown)}`;
+        } else {
+            timerText = `Time: ${this.formatTime(this.elapsedTime)}`;   
+        }
+        //====================draw====================================
+        if (this.selectedGameFlow === "countdown" && this.gameCountDown <= 30) {
+
+            const blinkSpeed = 500;
+            const blinkVisible = Math.floor(Date.now() / blinkSpeed) % 2 === 0;
+            //blinking
+            if (this.gameCountDown <= 20) {
+                if (!blinkVisible) return;   
+            }
+            this.context.fillStyle = "#ff5050";
+        } else {
+            this.context.fillStyle = 'white';
+        }
+
         this.context.font = '24px Arial';
         this.context.textAlign = 'left';
-        this.context.fillText(`Time: ${this.formatTime(this.elapsedTime)}`, 20, 35);
+        this.context.fillText(timerText, 60, 80);
     }
 
     render() {
@@ -1406,37 +1473,37 @@ class Game {
         this.renderButtons();
         // const isHovered = this.hoveredButton === btn;
 
-        // game over message
+    // ==================== Game over ===================================================
         if (this.selectedGameFlow === "countdown" && this.isGameOver) {
-    const centerX = this.canvas.width / 2;
-    const centerY = this.canvas.height / 2;
+            const centerX = this.canvas.width / 2;
+            const centerY = this.canvas.height / 2;
 
-    this.context.fillStyle = "rgba(0, 0, 0, 0.5)";
-    this.context.fillRect(this.drawX, this.drawY, this.drawWidth, this.drawHeight);
+            this.context.fillStyle = "rgba(0, 0, 0, 0.5)";
+            this.context.fillRect(this.drawX, this.drawY, this.drawWidth, this.drawHeight);
 
-    this.context.fillStyle = "#ff5050";
-    this.context.font = "60px Arial";
-    this.context.textAlign = "center";
-    this.context.fillText("TIME'S UP!", centerX, centerY - 40);
+            this.context.fillStyle = "#ff5050";
+            this.context.font = "60px Arial";
+            this.context.textAlign = "center";
+            this.context.fillText("TIME'S UP!", centerX, centerY - 40);
 
-    // Position the buttons below the text
-    const spacing = 20;
-    const totalWidth = this.gameOverButtons.length * 160 + (this.gameOverButtons.length - 1) * spacing;
-    let startX = centerX - totalWidth / 2;
-    const y = centerY + 20;
+             // Position the buttons below the text
+            const spacing = 20;
+            const totalWidth = this.gameOverButtons.length * 160 + (this.gameOverButtons.length - 1) * spacing;
+            let startX = centerX - totalWidth / 2;
+            const y = centerY + 20;
 
-    for (let btn of this.gameOverButtons) {
-        btn.x = startX;
-        btn.y = y;
-        drawButton(this.context, btn, this.hoveredButton === btn, this.assets);
-        startX += btn.width + spacing;
-    }
+            for (let btn of this.gameOverButtons) {
+                btn.x = startX;
+                btn.y = y;
+                drawButton(this.context, btn, this.hoveredButton === btn, this.assets);
+                startX += btn.width + spacing;
+            }
 
-    return;
-}
+            return;
+        }
 
 
-        //paused 
+    //======================paused ===========================================
         if (!this.isTimerRunning && this.userPaused) {
             this.context.fillStyle = "rgba(0, 0, 0, 0.6)";
             this.context.fillRect(this.drawX, this.drawY, this.drawWidth, this.drawHeight);
@@ -1451,7 +1518,7 @@ class Game {
 
 class VictoryScreen {
      constructor(canvas, context, timeElapsed, onPlayAgain, assets,
-        imagePath, lastImage, mode, rows, cols, backgroundSnapshot, bestTime, selectedGameFlow) {
+        imagePath, lastImage, mode, rows, cols, backgroundSnapshot, bestTime, selectedGameFlow, images) {
 
         this.canvas = canvas;
         this.context = context;
@@ -1466,6 +1533,7 @@ class VictoryScreen {
         this.backgroundSnapshot = backgroundSnapshot; // ✅ frozen game view
         this.bestTime = bestTime;
         this.selectedGameFlow = selectedGameFlow;
+        this.images = images;
 
         this.showDelay = true;
         this.revealTimer = setTimeout(() => {
@@ -1552,6 +1620,7 @@ class VictoryScreen {
         if (this.timeElapsed < 30) return 3;
         if (this.timeElapsed < 60) return 2;
         return 1;
+        console.log(this.timeElapsed);
     }
 
     handleClick(event) {
@@ -2005,10 +2074,6 @@ class MainMenu {
             ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
         }
 
-       
-        
-
-
         // Draw title
         ctx.save();
         ctx.fillStyle = "#fff";
@@ -2037,9 +2102,9 @@ class MainMenu {
                 ctx.shadowBlur = 20;
                 ctx.shadowOffsetY = 0;
                 ctx.strokeStyle = 'white';
-                ctx.lineWidth = 4;
+                ctx.lineWidth = 2;
                 ctx.beginPath();
-                ctx.roundRect(left, top, mode.width, mode.height, 32);
+                ctx.roundRect(left, top, mode.width, mode.height, 30);
                 ctx.stroke();
             }
 
@@ -2491,6 +2556,16 @@ class ImageSelectMenu {
         ctx.font = "48px Arial";
         ctx.textAlign = "center";
         ctx.fillText("Choose a Picture", this.canvas.width / 2, 80);
+
+        // Draw game mode label
+        this.context.fillStyle = "#fff";
+        this.context.font = "24px Montserrat";
+        this.context.textAlign = "left";
+        this.context.fillText(
+            `Mode: ${this.selectedGameFlow === "countdown" ? "Countdown" : "Normal"}`,
+            60,
+            this.canvas.height * 0.6 - this.thumbHeight - 20
+        );
 
         // Calculate thumbnail area dimensions
         const thumbAreaWidth = this.canvas.width * 0.9;
