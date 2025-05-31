@@ -2357,8 +2357,8 @@ class ImageSelectMenu {
             });
         }
 
-        this.rows = 2;
-        this.cols = 2;
+        this.rows = 4;
+        this.cols = 5;
         
         this.thumbnails = [];
         this.loadedCount = 0;
